@@ -88,6 +88,7 @@ import immutable.{List, Stream, Nil, ::}
  */
 trait TraversableLike[+A, +Repr] extends HasNewBuilder[A, Repr] 
                                     with FilterMonadic[A, Repr]
+                                    with TraversableExtensions[A, Repr]
                                     with TraversableOnce[A] { 
   self =>
 

@@ -168,7 +168,7 @@ object SeqLike {
  *
  *    Note: will not terminate for infinite-sized collections.
  */
-trait SeqLike[+A, +Repr] extends IterableLike[A, Repr] { self =>
+trait SeqLike[+A, +Repr] extends IterableLike[A, Repr] with SeqExtensions[A, Repr] { self =>
 
   override protected[this] def thisCollection: Seq[A] = this.asInstanceOf[Seq[A]]
   override protected[this] def toCollection(repr: Repr): Seq[A] = repr.asInstanceOf[Seq[A]]

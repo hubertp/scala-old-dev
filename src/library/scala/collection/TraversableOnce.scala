@@ -45,7 +45,7 @@ import mutable.{ Buffer, ListBuffer, ArrayBuffer }
  *
  *    Note: will not terminate for infinite-sized collections.
  */
-trait TraversableOnce[+A] {
+trait TraversableOnce[+A] extends TraversableOnceExtensions[A] {
   self =>
 
   /** Self-documenting abstract methods. */
@@ -96,7 +96,7 @@ trait TraversableOnce[+A] {
     self foreach (elems ::= _)
     elems
   }
-
+    
   /** The size of this $coll.
    *
    *  $willNotTerminateInf
