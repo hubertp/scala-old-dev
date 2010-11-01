@@ -361,7 +361,7 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
   def transformInfo(sym: Symbol, tp: Type): Type =
     if (sym == Object_asInstanceOf)
       sym.info
-    else if (sym == Object_isInstanceOf || sym == ArrayClass) 
+    else if (sym == Object_isInstanceOf || sym == ArrayClass)
       PolyType(sym.info.typeParams, erasure(sym.info.resultType))
     else if (sym.isAbstractType) 
       TypeBounds(WildcardType, WildcardType)
@@ -948,9 +948,9 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
         case TypeApply(fun, args) if (fun.symbol.owner != AnyClass && 
                                       fun.symbol != Object_asInstanceOf &&
                                       fun.symbol != Object_isInstanceOf) =>
-          // leave all other type tests/type casts, remove all other type applications
+          // leave all other type tests/type casts, remove all other type applications          
           preErase(fun)
-        case Apply(fn @ Select(qual, name), args) if (fn.symbol.owner == ArrayClass) => 
+        case Apply(fn @ Select(qual, name), args) if fn.symbol.owner == ArrayClass =>
           if (unboundedGenericArrayLevel(qual.tpe.widen) == 1) 
             // convert calls to apply/update/length on generic arrays to
             // calls of ScalaRunTime.array_xxx method calls
@@ -992,7 +992,18 @@ abstract class Erasure extends AddInterfaces with typechecker.Analyzer with ast.
                       Select(q(), Object_isInstanceOf) setPos sel.pos, 
                       List(TypeTree(tp) setPos targ.pos)) setPos fn.pos,
                     List()) setPos tree.pos
+
                 targ.tpe match {
+                  // rewrite x.isInstanceOf[Array[Foo]]
+                  //    to
+                  // ScalaRunTime.isArrayOfClass(x, classOf[Foo])
+                  case TypeRef(_, ArrayClass, List(arg)) if arg <:< AnyRefClass.tpe =>
+                    typedPos(tree.pos) {
+                      gen.mkRuntimeCall(
+                        nme.isArrayOfClass,
+                        List(qual, gen.mkClassOf(arg))
+                      )
+                    }
                   case SingleType(_, _) | ThisType(_) | SuperType(_, _) =>
                     val cmpOp = if (targ.tpe <:< AnyValClass.tpe) Any_equals else Object_eq
                     atPos(tree.pos) {

@@ -5,8 +5,8 @@ object Test {
     case x: Array[Int]      => x(0)
     case x: Array[Double]   => 2
     case x: Array[Float]    => x.sum.toInt
-    case x: Array[String]   => x.size
     case x: Array[AnyRef]   => 5
+    case x: Array[String]   => x.size
     case x: Array[_]        => 6
     case _                  => 7
   }
@@ -14,8 +14,8 @@ object Test {
     case x: Array[Int]      => x(0)
     case x: Array[Double]   => 2
     case x: Array[Float]    => x.sum.toInt
-    case x: Array[String]   => x.size
     case x: Array[AnyRef]   => 5
+    case x: Array[String]   => x.size
     case x: Array[_]        => 6
     case _                  => 7
   }
@@ -23,8 +23,8 @@ object Test {
     case x: Array[Int]      => x(0)
     case x: Array[Double]   => 2
     case x: Array[Float]    => x.sum.toInt
-    case x: Array[String]   => x.size
     case x: Array[AnyRef]   => 5
+    case x: Array[String]   => x.size
     case x: Array[_]        => 6
     case _                  => 7
   }

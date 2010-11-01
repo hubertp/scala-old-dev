@@ -21,18 +21,23 @@ import scala.util.control.ControlThrowable
 /* The object <code>ScalaRunTime</code> provides ...
  */
 object ScalaRunTime {
-  def isArray(x: AnyRef): Boolean = isArray(x, 1)
-  def isArray(x: Any, atLevel: Int): Boolean = 
+  def isArray(x: Any): Boolean = isArray(x, 1)
+  def isArray(x: Any, atLevel: Int): Boolean = {
+    def isArrayClass(clazz: Class[_], atLevel: Int): Boolean =
+      clazz.isArray && (atLevel == 1 || isArrayClass(clazz.getComponentType, atLevel - 1))
+    
     x != null && isArrayClass(x.asInstanceOf[AnyRef].getClass, atLevel)
-
-  private def isArrayClass(clazz: Class[_], atLevel: Int): Boolean =
-    clazz.isArray && (atLevel == 1 || isArrayClass(clazz.getComponentType, atLevel - 1))
+  }
+  /** For instanceof checks on Arrays, since the JVM thinks an Array[String] is
+   *  an Array[Object] but we do not.
+   */
+  def isArrayOfClass(array: Any, componentType: Class[_]): Boolean =
+    isArray(array, 1) && (array.asInstanceOf[AnyRef].getClass.getComponentType == componentType)
 
   def isValueClass(clazz: Class[_]) = clazz.isPrimitive() 
 
   /** Retrieve generic array element */
   def array_apply(xs: AnyRef, idx: Int): Any = xs match {
-    case x: Array[AnyRef]  => x(idx).asInstanceOf[Any]
     case x: Array[Int]     => x(idx).asInstanceOf[Any]
     case x: Array[Double]  => x(idx).asInstanceOf[Any]
     case x: Array[Long]    => x(idx).asInstanceOf[Any]
@@ -42,12 +47,12 @@ object ScalaRunTime {
     case x: Array[Short]   => x(idx).asInstanceOf[Any]
     case x: Array[Boolean] => x(idx).asInstanceOf[Any]
     case x: Array[Unit]    => x(idx).asInstanceOf[Any]
-    case null => throw new NullPointerException
+    case x: Array[_]       => (x.asInstanceOf[Array[AnyRef]])(idx).asInstanceOf[Any]
+    case null              => throw new NullPointerException
   }
 
   /** update generic array element */
   def array_update(xs: AnyRef, idx: Int, value: Any): Unit = xs match {
-    case x: Array[AnyRef]  => x(idx) = value.asInstanceOf[AnyRef]
     case x: Array[Int]     => x(idx) = value.asInstanceOf[Int]
     case x: Array[Double]  => x(idx) = value.asInstanceOf[Double]
     case x: Array[Long]    => x(idx) = value.asInstanceOf[Long]
@@ -57,12 +62,12 @@ object ScalaRunTime {
     case x: Array[Short]   => x(idx) = value.asInstanceOf[Short]
     case x: Array[Boolean] => x(idx) = value.asInstanceOf[Boolean]
     case x: Array[Unit]    => x(idx) = value.asInstanceOf[Unit]
-    case null => throw new NullPointerException
+    case x: Array[_]       => (x.asInstanceOf[Array[AnyRef]])(idx) = value.asInstanceOf[AnyRef]
+    case null              => throw new NullPointerException
   }    
 
   /** Get generic array length */
   def array_length(xs: AnyRef): Int = xs match {
-    case x: Array[AnyRef]  => x.length
     case x: Array[Int]     => x.length
     case x: Array[Double]  => x.length
     case x: Array[Long]    => x.length
@@ -72,11 +77,11 @@ object ScalaRunTime {
     case x: Array[Short]   => x.length
     case x: Array[Boolean] => x.length
     case x: Array[Unit]    => x.length
-    case null => throw new NullPointerException
+    case x: Array[_]       => (x.asInstanceOf[Array[AnyRef]]).length
+    case null              => throw new NullPointerException
   }    
 
   def array_clone(xs: AnyRef): AnyRef = xs match {
-    case x: Array[AnyRef]  => ArrayRuntime.cloneArray(x)
     case x: Array[Int]     => ArrayRuntime.cloneArray(x)
     case x: Array[Double]  => ArrayRuntime.cloneArray(x)
     case x: Array[Long]    => ArrayRuntime.cloneArray(x)
@@ -86,7 +91,8 @@ object ScalaRunTime {
     case x: Array[Short]   => ArrayRuntime.cloneArray(x)
     case x: Array[Boolean] => ArrayRuntime.cloneArray(x)
     case x: Array[Unit]    => x
-    case null => throw new NullPointerException
+    case x: Array[_]       => ArrayRuntime.cloneArray(x.asInstanceOf[Array[AnyRef]])
+    case null              => throw new NullPointerException
   }
 
   /** Convert a numeric value array to an object array.

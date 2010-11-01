@@ -70,16 +70,16 @@ abstract class WrappedArray[T] extends IndexedSeq[T] with ArrayLike[T, WrappedAr
  */
 object WrappedArray {  
   def make[T](x: AnyRef): WrappedArray[T] = x match {
-    case x: Array[AnyRef] => wrapRefArray[AnyRef](x).asInstanceOf[WrappedArray[T]]
-    case x: Array[Int] => wrapIntArray(x).asInstanceOf[WrappedArray[T]]
-    case x: Array[Double] => wrapDoubleArray(x).asInstanceOf[WrappedArray[T]]
-    case x: Array[Long] => wrapLongArray(x).asInstanceOf[WrappedArray[T]]
-    case x: Array[Float] => wrapFloatArray(x).asInstanceOf[WrappedArray[T]]
-    case x: Array[Char] => wrapCharArray(x).asInstanceOf[WrappedArray[T]]
-    case x: Array[Byte] => wrapByteArray(x).asInstanceOf[WrappedArray[T]]
-    case x: Array[Short] => wrapShortArray(x).asInstanceOf[WrappedArray[T]]
+    case x: Array[Int]     => wrapIntArray(x).asInstanceOf[WrappedArray[T]]
+    case x: Array[Double]  => wrapDoubleArray(x).asInstanceOf[WrappedArray[T]]
+    case x: Array[Long]    => wrapLongArray(x).asInstanceOf[WrappedArray[T]]
+    case x: Array[Float]   => wrapFloatArray(x).asInstanceOf[WrappedArray[T]]
+    case x: Array[Char]    => wrapCharArray(x).asInstanceOf[WrappedArray[T]]
+    case x: Array[Byte]    => wrapByteArray(x).asInstanceOf[WrappedArray[T]]
+    case x: Array[Short]   => wrapShortArray(x).asInstanceOf[WrappedArray[T]]
     case x: Array[Boolean] => wrapBooleanArray(x).asInstanceOf[WrappedArray[T]]
-    case x: Array[Unit] => wrapUnitArray(x).asInstanceOf[WrappedArray[T]]
+    case x: Array[Unit]    => wrapUnitArray(x).asInstanceOf[WrappedArray[T]]
+    case x: Array[_]       => wrapRefArray[AnyRef](x.asInstanceOf[Array[AnyRef]]).asInstanceOf[WrappedArray[T]]
   }
 
   implicit def canBuildFrom[T](implicit m: ClassManifest[T]): CanBuildFrom[WrappedArray[_], T, WrappedArray[T]] =

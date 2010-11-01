@@ -211,18 +211,18 @@ object Predef extends LowPriorityImplicits {
       def foreach[U](f: ((El1, El2, El3)) => U): Unit = zz foreach Function.untupled(f)
     }
 
-  implicit def genericArrayOps[T](xs: Array[T]): ArrayOps[T] = (xs: AnyRef) match { // !!! drop the AnyRef and get unreachable code errors!
-    case x: Array[AnyRef] => refArrayOps[AnyRef](x).asInstanceOf[ArrayOps[T]]
-    case x: Array[Int] => intArrayOps(x).asInstanceOf[ArrayOps[T]]
-    case x: Array[Double] => doubleArrayOps(x).asInstanceOf[ArrayOps[T]]
-    case x: Array[Long] => longArrayOps(x).asInstanceOf[ArrayOps[T]]
-    case x: Array[Float] => floatArrayOps(x).asInstanceOf[ArrayOps[T]]
-    case x: Array[Char] => charArrayOps(x).asInstanceOf[ArrayOps[T]]
-    case x: Array[Byte] => byteArrayOps(x).asInstanceOf[ArrayOps[T]] 
-    case x: Array[Short] => shortArrayOps(x).asInstanceOf[ArrayOps[T]]
+  implicit def genericArrayOps[T](xs: Array[T]): ArrayOps[T] = xs match {
+    case x: Array[Int]     => intArrayOps(x).asInstanceOf[ArrayOps[T]]
+    case x: Array[Double]  => doubleArrayOps(x).asInstanceOf[ArrayOps[T]]
+    case x: Array[Long]    => longArrayOps(x).asInstanceOf[ArrayOps[T]]
+    case x: Array[Float]   => floatArrayOps(x).asInstanceOf[ArrayOps[T]]
+    case x: Array[Char]    => charArrayOps(x).asInstanceOf[ArrayOps[T]]
+    case x: Array[Byte]    => byteArrayOps(x).asInstanceOf[ArrayOps[T]] 
+    case x: Array[Short]   => shortArrayOps(x).asInstanceOf[ArrayOps[T]]
     case x: Array[Boolean] => booleanArrayOps(x).asInstanceOf[ArrayOps[T]]
-    case x: Array[Unit] => unitArrayOps(x).asInstanceOf[ArrayOps[T]]
-    case null => null
+    case x: Array[Unit]    => unitArrayOps(x).asInstanceOf[ArrayOps[T]]
+    case x: Array[_]       => refArrayOps[AnyRef](x.asInstanceOf[Array[AnyRef]]).asInstanceOf[ArrayOps[T]]
+    case null              => null
   }
   
   implicit def refArrayOps[T <: AnyRef](xs: Array[T]): ArrayOps[T] = new ArrayOps.ofRef[T](xs)

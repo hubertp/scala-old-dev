@@ -210,6 +210,7 @@ trait StdNames extends reflect.generic.StdNames with NameManglers {
     val head = newTermName("head")
     def invoke_ = sn.Invoke
     val isArray = newTermName("isArray")
+    val isArrayOfClass = newTermName("isArrayOfClass")
     val isInstanceOf_ = newTermName("isInstanceOf")
     val isDefinedAt = newTermName("isDefinedAt")
     val isEmpty = newTermName("isEmpty")
