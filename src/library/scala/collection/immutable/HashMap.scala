@@ -188,7 +188,7 @@ object HashMap extends ImmutableMapFactory[HashMap] {
     }
   }
 
-  private class HashMapCollision1[A,+B](private[HashMap] var hash: Int, var kvs: ListMap[A,B @uncheckedVariance]) extends HashMap[A,B] {
+  private[immutable] class HashMapCollision1[A,+B](private[HashMap] var hash: Int, var kvs: ListMap[A,B @uncheckedVariance]) extends HashMap[A,B] {
     override def size = kvs.size
 
     override def get0(key: A, hash: Int, level: Int): Option[B] = 
@@ -316,7 +316,7 @@ object HashMap extends ImmutableMapFactory[HashMap] {
       }
     }
 
-    override def iterator = new TrieIterator[A, B](elems)
+    override def iterator: Iterator[(A, B)] = new CovariantTrieIterator[A, B](elems)
 
 /*
 
@@ -469,137 +469,33 @@ time { mNew.iterator.foreach( p => ()) }
       case hm: HashMap[_, _] => this
       case _ => error("section supposed to be unreachable.")
     }
-    
+  }
+
+  class CovariantTrieIterator[A, +B](elems: Array[HashMap[A, B]]) extends Iterator[(A, B)] {
+    private[this] val it = new TrieIterator[A, B](elems)
+    def next = it.next
+    def hasNext = it.hasNext
   }
   
-  class TrieIterator[A, +B](elems: Array[HashMap[A, B]]) extends Iterator[(A, B)] {
-    private[this] var depth = 0
-    private[this] var arrayStack = new Array[Array[HashMap[A,B]]](6)
-    private[this] var posStack = new Array[Int](6)
+  class TrieIterator[A, B](elems: Array[HashMap[A, B]]) extends TrieIteratorBase[(A, B), HashMap[A, B]](elems) {
+    import TrieIteratorBase._
     
-    private[this] var arrayD = elems
-    private[this] var posD = 0
-    
-    private[this] var subIter: Iterator[(A, B)] = null // to traverse collision nodes
-    
-    def hasNext = (subIter ne null) || depth >= 0
-    
-    def next: (A,B) = {
-      if (subIter ne null) {
-        val el = subIter.next
-        if (!subIter.hasNext)
-          subIter = null
-        el
-      } else
-        next0(arrayD, posD)
+    private[immutable] type ContainerType     = HashMap1[A, B]
+    private[immutable] type TrieType = HashTrieMap[A, B]
+    private[immutable] type CollisionType     = HashMapCollision1[A, B]
+    private[immutable] def determineType(x: HashMap[A, B]) = x match {
+      case _: HashMap1[_, _]          => CONTAINER_TYPE
+      case _: HashTrieMap[_, _]       => TRIE_TYPE
+      case _: HashMapCollision1[_, _] => COLLISION_TYPE
     }
-    
-    @scala.annotation.tailrec private[this] def next0(elems: Array[HashMap[A,B]], i: Int): (A,B) = {
-      if (i == elems.length-1) { // reached end of level, pop stack
-        depth -= 1
-        if (depth >= 0) {
-          arrayD = arrayStack(depth)
-          posD = posStack(depth)
-          arrayStack(depth) = null
-        } else {
-          arrayD = null
-          posD = 0
-        }
-      } else
-        posD += 1
-      
-      elems(i) match {
-        case m: HashTrieMap[A,B] => // push current pos onto stack and descend
-          if (depth >= 0) {
-            arrayStack(depth) = arrayD
-            posStack(depth) = posD
-          }
-          depth += 1
-          arrayD = m.elems
-          posD = 0
-          next0(m.elems, 0)
-        case m: HashMap1[A,B] => m.ensurePair
-        case m =>
-          subIter = m.iterator
-          subIter.next
-      }
-    }
-    
-    // assumption: contains 2 or more elements
-    // splits this iterator into 2 iterators
-    // returns the 1st iterator, its number of elements, and the second iterator
-    def split: ((Iterator[(A, B)], Int), Iterator[(A, B)]) = {
-      def collisionToArray(c: HashMapCollision1[_, _]) =
-        c.asInstanceOf[HashMapCollision1[A, B]].kvs.toArray map { HashMap() + _ }
-      def arrayToIterators(arr: Array[HashMap[A, B]]) = {
-        val (fst, snd) = arr.splitAt(arr.length / 2)
-        val szsnd = snd.foldLeft(0)(_ + _.size)
-        ((new TrieIterator(snd), szsnd), new TrieIterator(fst))
-      }
-      def splitArray(ad: Array[HashMap[A, B]]): ((Iterator[(A, B)], Int), Iterator[(A, B)]) = if (ad.length > 1) {
-        arrayToIterators(ad)
-      } else ad(0) match {
-        case c: HashMapCollision1[a, b] => arrayToIterators(collisionToArray(c.asInstanceOf[HashMapCollision1[A, B]]))
-        case hm: HashTrieMap[a, b] => splitArray(hm.elems.asInstanceOf[Array[HashMap[A, B]]])
-      }
-      
-      // 0) simple case: no elements have been iterated - simply divide arrayD
-      if (arrayD != null && depth == 0 && posD == 0) {
-        return splitArray(arrayD)
-      }
-      
-      // otherwise, some elements have been iterated over
-      // 1) collision case: if we have a subIter, we return subIter and elements after it
-      if (subIter ne null) {
-        val buff = subIter.toBuffer
-        subIter = null
-        ((buff.iterator, buff.length), this)
-      } else {
-        // otherwise find the topmost array stack element
-        if (depth > 0) {
-          // 2) topmost comes before (is not) arrayD
-          //    steal a portion of top to create a new iterator
-          val topmost = arrayStack(0)
-          if (posStack(0) == arrayStack(0).length - 1) {
-            // 2a) only a single entry left on top
-            // this means we have to modify this iterator - pop topmost
-            val snd = Array(arrayStack(0).last)
-            val szsnd = snd(0).size
-            // modify this - pop
-            depth -= 1
-            arrayStack = arrayStack.tail ++ Array[Array[HashMap[A, B]]](null)
-            posStack = posStack.tail ++ Array[Int](0)
-            // we know that `this` is not empty, since it had something on the arrayStack and arrayStack elements are always non-empty
-            ((new TrieIterator[A, B](snd), szsnd), this)
-          } else {
-            // 2b) more than a single entry left on top
-            val (fst, snd) = arrayStack(0).splitAt(arrayStack(0).length - (arrayStack(0).length - posStack(0) + 1) / 2)
-            arrayStack(0) = fst
-            val szsnd = snd.foldLeft(0)(_ + _.size)
-            ((new TrieIterator[A, B](snd), szsnd), this)
-          }
-        } else {
-          // 3) no topmost element (arrayD is at the top)
-          //    steal a portion of it and update this iterator
-          if (posD == arrayD.length - 1) {
-            // 3a) positioned at the last element of arrayD
-            val arr: Array[HashMap[A, B]] = arrayD(posD) match {
-              case c: HashMapCollision1[a, b] => collisionToArray(c).asInstanceOf[Array[HashMap[A, B]]]
-              case ht: HashTrieMap[_, _] => ht.asInstanceOf[HashTrieMap[A, B]].elems
-              case _ => error("cannot divide single element")
-            }
-            arrayToIterators(arr)
-          } else {
-            // 3b) arrayD has more free elements
-            val (fst, snd) = arrayD.splitAt(arrayD.length - (arrayD.length - posD + 1) / 2)
-            arrayD = fst
-            val szsnd = snd.foldLeft(0)(_ + _.size)
-            ((new TrieIterator[A, B](snd), szsnd), this)
-          }
-        }
-      }
-    }
-  }
+
+    private[immutable] def getElem(cc: ContainerType)            = cc.ensurePair
+    private[immutable] def getElems(t: TrieType)                 = t.elems
+    private[immutable] def collisionToArray(c: CollisionType)    = c.kvs map (x => HashMap(x)) toArray
+    private[immutable] def newThisType(xs: Array[HashMap[A, B]]) = new TrieIterator(xs)
+    private[immutable] def newDeepArray(size: Int)               = new Array[Array[HashMap[A, B]]](size)
+    private[immutable] def newSingleArray(el: HashMap[A, B])     = Array(el)
+  }  
   
   private def check[K](x: HashMap[K, _], y: HashMap[K, _], xy: HashMap[K, _]) = { // TODO remove this debugging helper
     var xs = Set[K]()
