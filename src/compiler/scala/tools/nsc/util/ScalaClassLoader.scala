@@ -11,6 +11,7 @@ import java.lang.reflect.{ Constructor, Modifier, Method }
 import java.net.URL
 import ScalaClassLoader._
 import scala.util.control.Exception.{ catching }
+import io.Streamable
 
 trait ScalaClassLoader extends JavaClassLoader {  
   /** Override to see classloader activity traced */
@@ -54,6 +55,10 @@ trait ScalaClassLoader extends JavaClassLoader {
     val result = super.loadClass(name, resolve)
     if (trace) println("loadClass(%s, %s) = %s".format(name, resolve, result))
     result
+  }
+  
+  def stringResource(path: String): String = {
+    new Streamable.Chars { val inputStream = getResource(path).openStream() } slurp()    
   }
   
   def constructorsOf[T <: AnyRef : Manifest]: List[Constructor[T]] =

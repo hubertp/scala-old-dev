@@ -179,6 +179,7 @@ self =>
     def parse(): Tree = {
       val t = parseStartRule()
       accept(EOF)
+      global.EV << global.EV.NewParse(t)
       t
     }
     

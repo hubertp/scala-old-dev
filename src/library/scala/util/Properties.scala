@@ -33,7 +33,7 @@ private[scala] trait PropertiesTrait
       quietlyDispose(props load stream, stream.close)
     
     props
-  }    
+  }
   
   private def quietlyDispose(action: => Unit, disposal: => Unit) =
     try     { action }

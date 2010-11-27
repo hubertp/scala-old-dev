@@ -618,7 +618,7 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
         rawname = name 
       }
     }
-
+    
     /** If this symbol has an expanded name, its original name, otherwise its name itself.
      *  @see expandName
      */
@@ -629,10 +629,30 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
       (fs | ((fs & LateFlags) >>> LateShift)) & ~(fs >>> AntiShift)
     }
     override final def flags_=(fs: Long) = rawflags = fs
-    final def setFlag(mask: Long): this.type = { rawflags = rawflags | mask; this }
-    final def resetFlag(mask: Long): this.type = { rawflags = rawflags & ~mask; this }
+    final def setFlag(mask: Long): this.type = {
+      val oldflags = rawflags
+      rawflags = rawflags | mask
+      if (oldflags != rawflags)
+        EV << EV.SetFlag(this, oldflags, rawflags, mask)
+
+      this 
+    }
+    final def resetFlag(mask: Long): this.type = {
+      val oldflags = rawflags
+      rawflags = rawflags & ~mask
+      if (oldflags != rawflags)
+        EV << EV.ClearFlag(this, oldflags, rawflags, mask)
+
+      this 
+    }
     final def getFlag(mask: Long): Long = flags & mask
-    final def resetFlags { rawflags = rawflags & TopLevelCreationFlags }
+    final def resetFlags {
+      val oldflags = rawflags
+      rawflags = rawflags & TopLevelCreationFlags
+      if (oldflags != rawflags)
+        EV << EV.ClearFlag(this, oldflags, rawflags, TopLevelCreationFlags)
+
+    }
 
     /** The class or term up to which this symbol is accessible,
      *  or RootClass if it is public.
@@ -719,7 +739,11 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
     }
 
     /** Set initial info. */
-    def setInfo(info: Type): this.type = { info_=(info); this }
+    def setInfo(info: Type): this.type = { 
+      info_=(info)
+      EV << EV.SymSetInfo(this, info)
+      this
+    }
 
     def setInfoOwnerAdjusted(info: Type): this.type = setInfo(info.atOwner(this))
 
@@ -1717,7 +1741,9 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
         for (sym2 <- alternatives)
           if (sym2 hasFlag JAVA)
             cook(sym2)
-    }    
+    }
+    
+    EV << EV.NewTermSymbol(this)
   }
 
   /** A class for module symbols */
@@ -1861,6 +1887,7 @@ trait Symbols extends reflect.generic.Symbols { self: SymbolTable =>
       new TypeSymbol(owner, pos, name)
 
     incCounter(typeSymbolCount)
+    EV << EV.NewTypeSymbol(this)
   }
 
   /** A class for type parameters viewed from inside their scopes

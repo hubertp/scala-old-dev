@@ -4163,7 +4163,10 @@ trait Typers { self: Analyzer =>
         printTyping("adapted "+tree1+":"+tree1.tpe.widen+" to "+pt+", "+context.undetparams) //DEBUG
 //      for (t <- tree1.tpe) assert(t != WildcardType)
 //      if ((mode & TYPEmode) != 0) println("type: "+tree1+" has type "+tree1.tpe)
-        if (phase.id <= currentRun.typerPhase.id) signalDone(context.asInstanceOf[analyzer.Context], tree, result)
+        if (phase.id <= currentRun.typerPhase.id) {
+          signalDone(context.asInstanceOf[analyzer.Context], tree, result)
+          EV << EV.TypedNode(context.asInstanceOf[analyzer.Context], tree, result)
+        }
         result
       } catch {
         case ex: TypeError =>

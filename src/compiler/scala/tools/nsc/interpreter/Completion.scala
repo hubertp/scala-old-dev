@@ -81,7 +81,38 @@ class Completion(val repl: Interpreter) extends CompletionOutput {
 
     // XXX we'd like to say "filterNot (_.isDeprecated)" but this causes the
     // compiler to crash for reasons not yet known.
-    def members     = (effectiveTp.nonPrivateMembers ++ anyMembers) filter (_.isPublic)
+    private var errorSwallowingQuota = 3
+    def members: List[Symbol] = 
+      try {
+        (effectiveTp.nonPrivateMembers ++ anyMembers) filter (_.isPublic)
+      }
+      catch {
+        case x: Exception => Nil
+        // Oct 2010:
+        // java.lang.AssertionError:
+        //    assertion failed: "trait Processing$ProcessingUtil.Gatherer"
+        //    has linkedModule: "object Processing$ProcessingUtil" with no members.
+        //
+        //  That emerges from a setup like:
+        //    trait Processing { trait ProcessingUtil { class Gather } }
+        //
+        //  at scala.Predef$.assert(Predef.scala:92)
+        //  at scala.tools.nsc.symtab.classfile.ClassfileParser$innerClasses$.innerSymbol$1(ClassfileParser.scala:1223)
+        //  at scala.tools.nsc.symtab.classfile.ClassfileParser$innerClasses$.classSymbol(ClassfileParser.scala:1238)
+        //
+        // If I swallow it and try it again it works the next time, so that's
+        // just what I'm going to do.
+        case x  =>
+          errorSwallowingQuota -= 1
+          if (errorSwallowingQuota <= 0)  // always with the sanity
+            throw x
+            
+          if (isCompletionDebug) {
+            Console.println("Encountered trauma trying to do type member completion, suppressing:")
+            x.printStackTrace()
+          }
+          Nil
+      }
     def methods     = members filter (_.isMethod)
     def packages    = members filter (_.isPackage)
     def aliases     = members filter (_.isAliasType)
@@ -352,7 +383,10 @@ class Completion(val repl: Interpreter) extends CompletionOutput {
        *  compiler still throws some Errors it may not be.
        */
       try {
-        (lastResultCompletion orElse regularCompletion orElse fileCompletion) getOrElse cursor
+        // Turn off events during type completion to avoid cycles.
+        EV withNoEvents {
+          (lastResultCompletion orElse regularCompletion orElse fileCompletion) getOrElse cursor
+        }
       }
       catch {
         case ex: Exception =>

@@ -42,6 +42,8 @@ trait BaseTypeSeqs {
     //  the mergePrefixAndArgs below, the elems get copied without the pending map,
     //  so that NoType's are seen instead of the original type --> spurious compile error)
     val pending = new BitSet(length)
+    
+    EV << EV.NewBaseTypeSeq(this)
 
     /** The type at i'th position in this sequence; lazy types are returned evaluated. */
     def apply(i: Int): Type =

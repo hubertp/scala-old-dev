@@ -239,6 +239,12 @@ abstract class SymbolLoaders {
   class ClassfileLoader(val classfile: AbstractFile) extends SymbolLoader {
     private object classfileParser extends ClassfileParser {
       val global: SymbolLoaders.this.global.type = SymbolLoaders.this.global
+      
+      override def parse(file: AbstractFile, root: Symbol) = {
+        val result = super.parse(file, root)
+        EV << EV.LoadedClassFile(file, root)
+        result
+      }
     }
     
     protected def description = "class file "+ classfile.toString

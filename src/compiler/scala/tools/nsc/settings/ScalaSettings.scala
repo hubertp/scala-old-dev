@@ -153,6 +153,7 @@ trait ScalaSettings extends AbsScalaSettings with StandardScalaSettings {
 
   // Warnings
   val Ywarndeadcode = BooleanSetting    ("-Ywarn-dead-code", "Emit warnings for dead code")
+  val Yhook         = StringSetting     ("-Yhook", "class", "Install named class as event hook", "")
 
   /**
    * "fsc-specific" settings.

@@ -186,6 +186,7 @@ trait Contexts { self: Analyzer =>
       c.retyping = this.retyping
       c.openImplicits = this.openImplicits
       registerContext(c.asInstanceOf[analyzer.Context])
+      EV << EV.NewContext(c.asInstanceOf[analyzer.Context])
       c
     }
 
@@ -197,10 +198,11 @@ trait Contexts { self: Analyzer =>
       c
     }
 
-    def makeNewImport(imp: Import): Context =
-      make(unit, imp, owner, scope, new ImportInfo(imp, depth) :: imports)
-      
-      
+    def makeNewImport(imp: Import): Context = {
+      val newImp = new ImportInfo(imp, depth)
+      EV << EV.NewImport(newImp.asInstanceOf[analyzer.ImportInfo])
+      make(unit, imp, owner, scope, newImp :: imports)
+    }
 
     def make(tree: Tree, owner: Symbol, scope: Scope): Context = {
       if (tree == this.tree && owner == this.owner && scope == this.scope) this

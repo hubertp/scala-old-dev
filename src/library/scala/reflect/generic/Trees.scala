@@ -41,17 +41,26 @@ trait Trees { self: Universe =>
     def & (flag: Long): Modifiers = {
       val flags1 = flags & flag
       if (flags1 == flags) this
-      else Modifiers(flags1, privateWithin, annotations, positions)
+      else {
+        EV << EV.ClearModFlag(this, flags, flags1, flag)
+        Modifiers(flags1, privateWithin, annotations, positions)
+      }
     }
     def &~ (flag: Long): Modifiers = {
       val flags1 = flags & (~flag)
       if (flags1 == flags) this
-      else Modifiers(flags1, privateWithin, annotations, positions)
+      else {
+        EV << EV.ClearModFlag(this, flags, flags1, flag)
+        Modifiers(flags1, privateWithin, annotations, positions)
+      }
     }
-    def | (flag: Long): Modifiers = {
+    def | (flag: Long): Modifiers = {      
       val flags1 = flags | flag
       if (flags1 == flags) this
-      else Modifiers(flags1, privateWithin, annotations, positions)
+      else {
+        EV << EV.SetModFlag(this, flags, flags1, flag)
+        Modifiers(flags1, privateWithin, annotations, positions)
+      }
     }
     def withAnnotations(annots: List[Tree]) =
       if (annots.isEmpty) this

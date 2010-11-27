@@ -6,11 +6,12 @@
 package scala.tools.nsc
 package symtab
 
-import ast.{Trees, TreePrinters, DocComments}
-
+import ast.{ Trees, TreePrinters, DocComments }
 import util._
+import event.EventsSymbolTable
 
 abstract class SymbolTable extends reflect.generic.Universe
+                              with EventsSymbolTable
                               with Names
                               with Symbols
                               with Types
@@ -26,7 +27,7 @@ abstract class SymbolTable extends reflect.generic.Universe
                               with TreePrinters
                               with Positions
                               with DocComments
-{
+{  
   def settings: Settings
   def rootLoader: LazyType
   def log(msg: => AnyRef)

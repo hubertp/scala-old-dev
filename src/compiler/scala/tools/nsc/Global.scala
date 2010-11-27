@@ -30,8 +30,10 @@ import backend.{ ScalaPrimitives, Platform, MSILPlatform, JavaPlatform }
 import backend.jvm.GenJVM
 import backend.opt.{ Inliners, ClosureElimination, DeadCodeElimination }
 import backend.icode.analysis._
+import event.{ EventsGlobal, HookLoader }
 
 class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
+                                                             with EventsGlobal
                                                              with CompilationUnits
                                                              with Plugins
                                                              with PhaseAssembly
@@ -44,7 +46,26 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
   def this(settings: Settings) =
     this(settings, new ConsoleReporter(settings))
   
-  // platform specific elements
+  // event hooks ------------------------------------------------------
+  
+  object EV extends {
+    val global: Global.this.type = Global.this
+  } with EventModel {
+    val loader = new {
+      val global: Global.this.type = Global.this
+    } with HookLoader
+    
+    lazy val postInit: Unit = {
+      posOK = true
+      settings.Yhook.value match {
+        case ""   => ()
+        case arg  => 
+          log("Installing user hook: " + settings.Yhook.value)
+          addHook(loader createHookFromString arg)
+      }
+    }
+    isInitialized = true
+  }
 
   type ThisPlatform = Platform[_] { val global: Global.this.type }
   
@@ -755,6 +776,7 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
     def runIsPast(ph: Phase) = globalPhase.id > ph.id
 
     isDefined = true
+    EV.postInit
 
     // ----------- Units and top-level classes and objects --------
 
@@ -881,6 +903,7 @@ class Global(var settings: Settings, var reporter: Reporter) extends SymbolTable
         if (opt.printStats)
           statistics.print(phase)
 
+        units foreach (unit => EV << EV.ThisPhaseDone(unit))
         advancePhase
       }
       if (opt.profileAll) {

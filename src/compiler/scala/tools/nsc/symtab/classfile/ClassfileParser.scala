@@ -1234,7 +1234,10 @@ abstract class ClassfileParser {
                 atPhase(currentRun.typerPhase)(getMember(sym, innerName.toTypeName))
               else 
                 getMember(sym, innerName.toTypeName)
-            assert(s ne NoSymbol, sym + "." + innerName + " linkedModule: " + sym.companionModule + sym.companionModule.info.members)
+            assert(s ne NoSymbol, 
+              "\"" + sym + "." + innerName + "\" has linkedModule: " + 
+              "\"" + sym.companionModule + "\" with members: " + sym.companionModule.info.members.mkString(", ")
+            )
             s
 
           case None =>

@@ -640,9 +640,12 @@ trait Types extends reflect.generic.Types { self: SymbolTable =>
     def <:<(that: Type): Boolean = {
       if (util.Statistics.enabled) stat_<:<(that)
       else {
-        (this eq that) ||
-        (if (explainSwitch) explain("<:", isSubType, this, that)
-         else isSubType(this, that, AnyDepth))
+        val result = 
+          (this eq that) ||
+          (if (explainSwitch) explain("<:", isSubType, this, that)
+           else isSubType(this, that, AnyDepth))
+        EV << EV.SubTypeCheck(this, that, result)
+        result
       }
     }
     
