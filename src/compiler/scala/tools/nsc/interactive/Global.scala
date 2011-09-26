@@ -1023,6 +1023,8 @@ class Global(settings: Settings, reporter: Reporter, projectName: String = "")
   
   implicit def addOnTypeError[T](x: => T): OnTypeError[T] = new OnTypeError(x)
   
+
+  // TODO: this might/might not work with current context errors infrastructure
   class OnTypeError[T](op: => T) {
     def onTypeError(alt: => T) = try {
       op

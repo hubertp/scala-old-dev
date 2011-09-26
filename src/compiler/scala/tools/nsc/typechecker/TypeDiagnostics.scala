@@ -112,8 +112,6 @@ trait TypeDiagnostics {
       else nameString + " is not a member of " + targetKindString + target + addendum
     )
   }
-  def notAMemberError(pos: Position, qual: Tree, name: Name) =
-    context.error(pos, notAMemberMessage(pos, qual, name))
   
   /** Only prints the parameter names if they're not synthetic,
    *  since "x$1: Int" does not offer any more information than "Int".
@@ -380,14 +378,8 @@ trait TypeDiagnostics {
         // Error suppression will squash some of these warnings unless we circumvent it.
         // It is presumed if you are using a -Y option you would really like to hear
         // the warnings you've requested.
-        if (settings.warnDeadCode.value && context.unit.exists && treeOK(tree) && exprOK) {
-          val saved = context.reportGeneralErrors
-          try {
-            context.reportGeneralErrors = true
-            context.warning(tree.pos, "dead code following this construct")
-          }
-          finally context.reportGeneralErrors = saved
-        }
+        if (settings.warnDeadCode.value && context.unit.exists && treeOK(tree) && exprOK)
+            context.warning(tree.pos, "dead code following this construct", true)
         tree
       }
 
@@ -405,7 +397,7 @@ trait TypeDiagnostics {
     /** Returns Some(msg) if the given tree is untyped apparently due
      *  to a cyclic reference, and None otherwise.
      */
-    private def cyclicReferenceMessage(sym: Symbol, tree: Tree) = condOpt(tree) {      
+    def cyclicReferenceMessage(sym: Symbol, tree: Tree) = condOpt(tree) {      
       case ValDef(_, _, tpt, _) if tpt.tpe == null        => "recursive "+sym+" needs type"
       case DefDef(_, _, _, _, tpt, _) if tpt.tpe == null  => List(cyclicAdjective(sym), sym, "needs result type") mkString " "
     }
@@ -421,7 +413,10 @@ trait TypeDiagnostics {
      */
     def reportTypeError(context0: Analyzer#Context, pos: Position, ex: TypeError) {
       if (ex.pos == NoPosition) ex.pos = pos
-      if (!context0.reportGeneralErrors) throw ex
+      // TODO: should it be !reportErrors only for now
+      // cannot be throwErrors yet, because then things are not propagated
+      // and tests fail. Investigate why.
+      if (!context0.reportErrors) throw ex
       if (settings.debug.value) ex.printStackTrace()
 
       ex match {
@@ -434,11 +429,5 @@ trait TypeDiagnostics {
           contextError(context0, ex.pos, ex)
       }
     }
-    
-    def emitAllErrorTrees(tree: Tree, context: Context) =
-      errorTreesFinder(tree).foreach(_.emit(context))
-      
-    def findAllNestedErrors(trees: List[Tree]): List[ErrorTree] =
-      trees.map(errorTreesFinder(_)).flatten
   }
 }

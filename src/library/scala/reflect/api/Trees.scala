@@ -88,15 +88,9 @@ trait Trees /*extends reflect.generic.Trees*/ { self: Universe =>
    *  example is Parens, which is eliminated during parsing.
    */
   abstract class Tree extends Product {
-    private[this] var treebits: Int = { nodeCount += 1; nodeCount }
-
-    def id                               = (treebits & TreeIdMask)
-    def isErrorTree                      = (treebits & Erroneous) != 0
-    def isErrorChecked                   = (treebits & ErrorChecked) != 0
-    protected final def setErrorBit()    = treebits |= Erroneous
-    protected final def setCheckedBit()  = treebits |= ErrorChecked
-    private[scala] def resetErrorBits()  = treebits = id
-
+    val id = nodeCount
+    nodeCount += 1
+    
     private[this] var rawpos: Position = NoPosition
 
     def pos = rawpos
@@ -228,27 +222,12 @@ trait Trees /*extends reflect.generic.Trees*/ { self: Universe =>
       pos = tree.pos
       tpe = tree.tpe
       if (hasSymbol) symbol = tree.symbol
-      if (tree.isErrorTree) setErrorBit()
       this
     }
     
     override def toString: String = show(this)
     override def hashCode(): Int = System.identityHashCode(this)
     override def equals(that: Any) = this eq that.asInstanceOf[AnyRef]
-    
-    def containsError(): Boolean = {
-      if (!isErrorChecked) {
-        for (t <- this ; if (t ne this) && t.containsError())
-          setErrorBit()
-
-        setCheckedBit()
-      }
-      isErrorTree
-    }
-  }
-  
-  trait AbsErrorTree extends Tree {
-    def emit(): Unit
   }
 
   /** A tree for a term.  Not all terms are TermTrees; use isTerm 
@@ -659,7 +638,6 @@ trait Trees /*extends reflect.generic.Trees*/ { self: Universe =>
     */
   case class TypeTree() extends TypTree {
     private var orig: Tree = null
-    private var errorCause: Tree = null
     private[scala] var wasEmpty: Boolean = false
     
     override def symbol = if (tpe == null) null else tpe.typeSymbol
@@ -673,13 +651,6 @@ trait Trees /*extends reflect.generic.Trees*/ { self: Universe =>
       }
         
       orig = followOriginal(tree); setPos(tree.pos); 
-      this
-    }
-    
-    def setErrorCause(tree: Tree): this.type = {
-      assert(tree != null)
-      errorCause = tree
-      setErrorBit()
       this
     }
 
@@ -800,7 +771,6 @@ trait Trees /*extends reflect.generic.Trees*/ { self: Universe =>
         traverse(lo); traverse(hi)
       case ExistentialTypeTree(tpt, whereClauses) =>
         traverse(tpt); traverseTrees(whereClauses)
-      case _: AbsErrorTree =>
       case _ => xtraverse(this, tree)
     }
 

@@ -51,13 +51,21 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
     }
 
     private def checkPackedConforms(tree: Tree, pt: Type): Tree = {
+      // TODO remove Typer dependency
+      def typeError(typer: analyzer.Typer, pos: Position, found: Type, req: Type) {
+        if (!found.isErroneous && !req.isErroneous) {
+          typer.context.error(pos, analyzer.withAddendum(pos)(typer.infer.typeErrorMsg(found, req)))
+          if (settings.explaintypes.value)
+            explainTypes(found, req)
+        }
+      }
+      
       if (tree.tpe exists (_.typeSymbol.isExistentialSkolem)) {
         val packed = localTyper.packedType(tree, NoSymbol)
-        packed._2.foreach(_.emit())
-        if (!(packed._1 <:< pt)) {
+        if (!(packed <:< pt)) {
           val errorContext = localTyper.context.make(localTyper.context.tree)
-          errorContext.reportGeneralErrors = true
-          analyzer.newTyper(errorContext).infer.typeError(tree.pos, packed._1, pt)
+          errorContext.setReportErrors()
+          typeError(analyzer.newTyper(errorContext), tree.pos, packed, pt)
         }
       }
       tree

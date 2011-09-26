@@ -192,9 +192,7 @@ abstract class TreeGen extends reflect.internal.TreeGen {
    *  which refer to it.
    */
   private def mkPackedValDef(expr: Tree, owner: Symbol, name: Name): (Tree, () => Ident) = {
-    val (packedType, errs) = typer.packedType(expr, owner)
-    // TODO ensure that they don't throw errors?
-    errs.foreach(_.emit(typer.context))
+    val packedType = typer.packedType(expr, owner)
     val sym = (
       owner.newValue(expr.pos.makeTransparent, name)
       setFlag SYNTHETIC
@@ -202,10 +200,7 @@ abstract class TreeGen extends reflect.internal.TreeGen {
     )
 
     val identFn = () => Ident(sym) setPos sym.pos.focus setType expr.tpe
-    if (errs.isEmpty)
-      (ValDef(sym, expr), identFn)
-    else
-      (analyzer.PendingErrors(errs), identFn)
+    (ValDef(sym, expr), identFn)
   }
 
   /** Used in situations where you need to access value of an expression several times

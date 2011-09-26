@@ -28,7 +28,7 @@ trait Plugins {
     val dirs = (settings.pluginsDir.value split File.pathSeparator).toList map Path.apply
     val classes = Plugin.loadAllFrom(jars, dirs, settings.disable.value)
     
-    // Lach plugin must only be instantiated once. A common pattern
+    // Each plugin must only be instantiated once. A common pattern
     // is to register annotation checkers during object construction, so
     // creating multiple plugin instances will leave behind stale checkers.
     classes map (Plugin.instantiate(_, this))
@@ -87,7 +87,7 @@ trait Plugins {
       if (!opts.isEmpty)
         p.processOptions(opts, globalError)
     }
-      
+
     /** Verify no non-existent plugin given with -P */      
     for (opt <- settings.pluginOptions.value ; if plugs forall (p => optList(List(opt), p).isEmpty))
       globalError("bad option: -P:" + opt)

@@ -71,8 +71,7 @@ trait Contexts { self: Analyzer =>
     for (imp <- rootImports(unit, tree))
       addImport(imp)
     val c = sc.make(unit, tree, sc.owner, sc.scope, sc.imports)
-    c.reportAmbiguousErrors = !erasedTypes
-    c.reportGeneralErrors = !erasedTypes
+    if (erasedTypes) c.setThrowErrors() else c.setReportErrors()
     c.implicitsEnabled = !erasedTypes
     c
   }
@@ -87,8 +86,19 @@ trait Contexts { self: Analyzer =>
       sc = sc.outer
     }
   }
+  
+  private object Errors {
+    final val ReportErrors     = 1 << 0
+    final val BufferErrors     = 1 << 1
+    final val AmbiguousErrors  = 1 << 2
+    final val notThrowMask     = ReportErrors | BufferErrors
+    final val AllMask          = ReportErrors | BufferErrors | AmbiguousErrors
+    
+  }
 
   class Context private[typechecker] {
+    import Errors._
+    
     var unit: CompilationUnit = NoCompilationUnit
     var tree: Tree = _                      // Tree associated with this context
     var owner: Symbol = NoSymbol            // The current owner
@@ -114,8 +124,6 @@ trait Contexts { self: Analyzer =>
     // (the call to the super or self constructor in the first line of a constructor)
     // in this context the object's fields should not be in scope
 
-    var reportAmbiguousErrors = false
-    var reportGeneralErrors = false
     var diagnostic: List[String] = Nil      // these messages are printed when issuing an error
     var implicitsEnabled = false
     var checking = false
@@ -132,18 +140,56 @@ trait Contexts { self: Analyzer =>
       else undetparams.mkString("undetparams=", ", ", "")
     def undetparams = _undetparams
     def undetparams_=(ps: List[Symbol]) = { _undetparams = ps }
+    
+    
 
     def extractUndetparams() = {
       val tparams = undetparams
       undetparams = List()
       tparams
     }
-
-    def withoutReportingErrors[T](op: => T): T = {
-      val saved = reportGeneralErrors
-      reportGeneralErrors = false
-      try op
-      finally reportGeneralErrors = saved
+    
+    private var mode = 0
+    private[this] val buffer = ListBuffer[AbsTypeError]()
+    
+    def errBuffer = buffer
+    def hasErrors = errBuffer.nonEmpty
+    
+    def state: Int = mode
+    def restoreState(state0: Int) = mode = state0
+    
+    def reportErrors    = (state & ReportErrors) != 0
+    def bufferErrors    = (state & BufferErrors) != 0
+    def ambiguousErrors = (state & AmbiguousErrors)  != 0
+    def throwErrors     = (state & notThrowMask) == 0
+    
+    def setReportErrors()    = mode = (ReportErrors | AmbiguousErrors)
+    def setBufferErrors()    = {
+      assert(bufferErrors || !hasErrors, "When entering the buffer state, context has to be clean. Current buffer: " + errBuffer)
+      mode = BufferErrors
+    }
+    def setThrowErrors()     = mode &= (~AllMask)
+    def setAmbiguousErrors(report: Boolean) = if (report) mode |= AmbiguousErrors else mode &= notThrowMask
+    
+    def updateBuffer(context0: Context) = errBuffer ++= (context0.errBuffer -- errBuffer)
+    def updateBuffer(errors: ListBuffer[AbsTypeError]) = errBuffer ++= errors    
+    
+    def logError(err: AbsTypeError) {
+      assert(bufferErrors, "errors can be put into context's buffer iff we are in silent mode")
+      buffer += err
+    }
+    
+    def flushBuffer() { errBuffer.clear() }
+    
+    def selectiveFlushBuffer(leaveOut: AbsTypeError => Boolean) = {
+      val elems = errBuffer.filter(leaveOut)
+      errBuffer --= elems
+    }
+    
+    def flushAndReturnBuffer(): ListBuffer[AbsTypeError] = {
+      val current = errBuffer.clone()
+      errBuffer.clear()
+      current
     }
 
     def withImplicitsDisabled[T](op: => T): T = {
@@ -184,8 +230,7 @@ trait Contexts { self: Analyzer =>
       c.depth = if (scope == this.scope) this.depth else this.depth + 1
       c.imports = imports
       c.inSelfSuperCall = inSelfSuperCall
-      c.reportAmbiguousErrors = this.reportAmbiguousErrors
-      c.reportGeneralErrors = this.reportGeneralErrors
+      c.restoreState(this.state)
       c.diagnostic = this.diagnostic
       c.typingIndentLevel = typingIndentLevel
       c.implicitsEnabled = this.implicitsEnabled
@@ -197,10 +242,10 @@ trait Contexts { self: Analyzer =>
       c
     }
 
+    // TODO: not used at all?
     def make(unit: CompilationUnit): Context = {
       val c = make(unit, EmptyTree, owner, scope, imports)
-      c.reportAmbiguousErrors = true
-      c.reportGeneralErrors = true
+      c.setReportErrors()
       c.implicitsEnabled = true
       c
     }
@@ -227,8 +272,8 @@ trait Contexts { self: Analyzer =>
 
     def makeSilent(reportAmbiguousErrors: Boolean, newtree: Tree = tree): Context = {
       val c = make(newtree)
-      c.reportGeneralErrors = false
-      c.reportAmbiguousErrors = reportAmbiguousErrors
+      c.setBufferErrors()
+      c.setAmbiguousErrors(reportAmbiguousErrors)
       c
     }
 
@@ -240,13 +285,11 @@ trait Contexts { self: Analyzer =>
 
     def makeConstructorContext = {
       var baseContext = enclClass.outer
-      //todo: find out why we need next line
       while (baseContext.tree.isInstanceOf[Template])
         baseContext = baseContext.outer
       val argContext = baseContext.makeNewScope(tree, owner)
       argContext.inSelfSuperCall = true
-      argContext.reportGeneralErrors = this.reportGeneralErrors
-      argContext.reportAmbiguousErrors = this.reportAmbiguousErrors
+      argContext.restoreState(this.state)
       def enterElems(c: Context) {
         def enterLocalElems(e: ScopeEntry) {
           if (e != null && e.owner == c.scope) {
@@ -273,47 +316,40 @@ trait Contexts { self: Analyzer =>
     private def unitError(pos: Position, msg: String) = 
       unit.error(pos, if (checking) "\n**** ERROR DURING INTERNAL CHECKING ****\n" + msg else msg)
 
+    def issue(err: AbsTypeError) {
+      if (reportErrors) unitError(err.errPos, addDiagString(err.errMsg))
+      else if (bufferErrors) { if (!buffer.contains(err)) buffer += err }
+      else throw new TypeError(err.errPos, err.errMsg) 
+    }
+    
+    def issueAmbiguousError(pre: Type, sym1: Symbol, sym2: Symbol, err: AbsTypeError) {
+      if (ambiguousErrors) {
+        if (!pre.isErroneous && !sym1.isErroneous && !sym2.isErroneous)
+          unitError(err.errPos, err.errMsg)
+      } else if (bufferErrors) { if (!buffer.contains(err)) buffer += err }
+      else throw new TypeError(err.errPos, err.errMsg)
+    }
+    
+    def issueAmbiguousError(err: AbsTypeError) {
+      if (ambiguousErrors)
+        unitError(err.errPos, addDiagString(err.errMsg))
+      else if (bufferErrors) { if (!buffer.contains(err)) buffer += err }
+      else throw new TypeError(err.errPos, err.errMsg)
+    }
+      
+    // TODO to remove both
     def error(pos: Position, err: Throwable) =
-      if (reportGeneralErrors) unitError(pos, addDiagString(err.getMessage()))
+      if (reportErrors) unitError(pos, addDiagString(err.getMessage()))
       else throw err
 
     def error(pos: Position, msg: String) = {
       val msg1 = addDiagString(msg)
-      if (reportGeneralErrors) unitError(pos, msg1)
+      if (reportErrors) unitError(pos, msg1)
       else throw new TypeError(pos, msg1)
     }
 
-/*!!!    def errorTree(pos: Position, msg: String): ErrorTree = {
-      error(pos, msg)
-      ErrorTree(msg) setPos pos
-    }
-    */
-
-    def warning(pos:  Position, msg: String) = {
-      if (reportGeneralErrors) unit.warning(pos, msg)
-    }
-
-    def ambiguousError(pos: Position, pre: Type, sym1: Symbol, sym2: Symbol, rest: String) {
-      val (reportPos, msg) = (
-        if (sym1.hasDefaultFlag && sym2.hasDefaultFlag && sym1.enclClass == sym2.enclClass) {
-          val methodName = nme.defaultGetterToMethod(sym1.name)
-          (sym1.enclClass.pos,            
-           "in "+ sym1.enclClass +", multiple overloaded alternatives of " + methodName +
-                     " define default arguments")
-        }
-        else {
-          (pos,
-            ("ambiguous reference to overloaded definition,\n" +
-             "both " + sym1 + sym1.locationString + " of type " + pre.memberType(sym1) +
-             "\nand  " + sym2 + sym2.locationString + " of type " + pre.memberType(sym2) +
-             "\nmatch " + rest)
-          )
-        }
-      )
-      if (reportAmbiguousErrors) {
-        if (!pre.isErroneous && !sym1.isErroneous && !sym2.isErroneous)
-          unit.error(reportPos, msg)
-      } else throw new TypeError(pos, msg)
+    def warning(pos:  Position, msg: String, force: Boolean = false) = {
+      if (reportErrors || force) unit.warning(pos, msg)
     }
 
     def isLocal(): Boolean = tree match {
@@ -345,8 +381,8 @@ trait Contexts { self: Analyzer =>
     def nextEnclosing(p: Context => Boolean): Context =
       if (this == NoContext || p(this)) this else outer.nextEnclosing(p)
 
-    override def toString = "Context(%s@%s unit=%s scope=%s)".format(
-      owner.fullName, tree.shortClass, unit, scope.##
+    override def toString = "Context(%s@%s unit=%s scope=%s errors=%b)".format(
+      owner.fullName, tree.shortClass, unit, scope.##, hasErrors
     )
     /** Is `sub` a subclass of `base` or a companion object of such a subclass?
      */

@@ -492,9 +492,6 @@ abstract class TreeBrowsers {
 
       case Star(t) =>
         ("Star", EMPTY)
-        
-      case _: AbsErrorTree =>
-        ("ErrorTree", EMPTY)
     }
 
     /** Return a list of children for the given tree node */
@@ -636,9 +633,6 @@ abstract class TreeBrowsers {
 
       case Star(t) =>
         List(t)
-
-      case _: AbsErrorTree =>
-        Nil
     }
 
     /** Return a textual representation of this t's symbol */

@@ -1519,7 +1519,7 @@ trait Types extends api.Types { self: SymbolTable =>
     override val decls: Scope,
     override val typeSymbol: Symbol) extends CompoundType 
   {
-    validateClassInfo(this)
+    validateClassInfo(this)    
     
     /** refs indices */
     private final val NonExpansive = 0
@@ -3652,15 +3652,17 @@ A type's typeSymbol should never be inspected directly.
                 pre.baseType(symclazz).deconst match {
                   case TypeRef(_, basesym, baseargs) =>
                     //Console.println("instantiating " + sym + " from " + basesym + " with " + basesym.typeParams + " and " + baseargs+", pre = "+pre+", symclazz = "+symclazz);//DEBUG
-                    if (sameLength(basesym.typeParams, baseargs)) {
+                    if (sameLength(basesym.typeParams, baseargs))
                       instParam(basesym.typeParams, baseargs)
-                    } else {
-                      throw new TypeError(
-                        "something is wrong (wrong class file?): "+basesym+ 
-                        " with type parameters "+
-                        basesym.typeParams.map(_.name).mkString("[",",","]")+
-                        " gets applied to arguments "+baseargs.mkString("[",",","]")+", phase = "+phase)
-                    }
+                    else
+                      if (symclazz.tpe.parents.exists(_.isErroneous))
+                        ErrorType // don't be to overzealous with throwing exceptions, see #2641
+                      else
+                        throw new TypeError(
+                          "something is wrong (wrong class file?): "+basesym+ 
+                          " with type parameters "+
+                          basesym.typeParams.map(_.name).mkString("[",",","]")+
+                          " gets applied to arguments "+baseargs.mkString("[",",","]")+", phase = "+phase)
                   case ExistentialType(tparams, qtpe) =>
                     capturedParams = capturedParams union tparams
                     toInstance(qtpe, clazz)

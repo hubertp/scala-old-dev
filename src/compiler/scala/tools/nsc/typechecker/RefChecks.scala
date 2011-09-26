@@ -1189,16 +1189,12 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
     }
 
     /* Check whether argument types conform to bounds of type parameters */
-    private def checkBounds(pre: Type, owner: Symbol, tparams: List[Symbol], argtps: List[Type], pos: Position): Unit =
-      try typer.infer.checkBounds(pos, pre, owner, tparams, argtps, "") match {
-        case Some(err) => err.emit(typer.context)
-        case _ => ()
-      }
-      catch {
+    private def checkBounds(tree0: Tree, pre: Type, owner: Symbol, tparams: List[Symbol], argtps: List[Type]): Unit =
+      try {
+        typer.infer.checkBounds(tree0, pre, owner, tparams, argtps, "")
+      } catch {
         case ex: TypeError =>
-          // checkBounds no longer throws errors (apart from Cyclic ones)
-          // so maybe it is safe to remove/simplify this catch?
-          unit.error(pos, ex.getMessage())
+          unit.error(tree0.pos, ex.getMessage())
           if (settings.explaintypes.value) {
             val bounds = tparams map (tp => tp.info.instantiateTypeParams(tparams, argtps).bounds)
             (argtps, bounds).zipped map ((targ, bound) => explainTypes(bound.lo, targ))
@@ -1326,22 +1322,22 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
         false
     }
 
-    private def checkTypeRef(tp: Type, pos: Position) = tp match {
+    private def checkTypeRef(tp: Type, tree: Tree) = tp match {
       case TypeRef(pre, sym, args) =>
-        checkDeprecated(sym, pos)
+        checkDeprecated(sym, tree.pos)
         if(sym.isJavaDefined)
           sym.typeParams foreach (_.cookJavaRawInfo())
         if (!tp.isHigherKinded)
-          checkBounds(pre, sym.owner, sym.typeParams, args, pos)
+          checkBounds(tree, pre, sym.owner, sym.typeParams, args)
       case _ =>
     }
 
-    private def checkAnnotations(tpes: List[Type], pos: Position) = tpes foreach (tp => checkTypeRef(tp, pos))
+    private def checkAnnotations(tpes: List[Type], tree: Tree) = tpes foreach (tp => checkTypeRef(tp, tree))
     private def doTypeTraversal(tree: Tree)(f: Type => Unit) = if (!inPattern) tree.tpe foreach f
 
     private def applyRefchecksToAnnotations(tree: Tree): Unit = {
       def applyChecks(annots: List[AnnotationInfo]) = {
-        checkAnnotations(annots map (_.atp), tree.pos)
+        checkAnnotations(annots map (_.atp), tree)
         transformTrees(annots flatMap (_.args))
       }
 
@@ -1357,12 +1353,7 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
           if(tpt.original != null) {
             tpt.original foreach {
               case dc@TypeTreeWithDeferredRefCheck() =>
-                dc.check() match {
-                  case Left(err) =>
-                    err.emit()
-                  case Right(t) =>
-                    applyRefchecksToAnnotations(t) // #2416
-                }
+                applyRefchecksToAnnotations(dc.check()) // #2416
               case _ =>
             }
           }
@@ -1408,7 +1399,7 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
             unit.error(tree.pos, "too many dimensions for array creation")
             Literal(Constant(null))
           } else {
-            localTyper.getManifestTree(tree.pos, etpe, false)
+            localTyper.getManifestTree(tree, etpe, false)
           }
         }
         val newResult = localTyper.typedPos(tree.pos) {
@@ -1526,11 +1517,8 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
             if(tpt.original != null) {
               tpt.original foreach {
                 case dc@TypeTreeWithDeferredRefCheck() =>
-                  dc.check() match {
-                    case Left(err) => err.emit()
-                    case Right(tree) => transform(tree) // #2416 -- only call transform to do refchecks, but discard results
-                      // tpt has the right type if the deferred checks are ok
-                  }
+                  transform(dc.check()) // #2416 -- only call transform to do refchecks, but discard results
+                  // tpt has the right type if the deferred checks are ok
                 case _ =>
               }
             }
@@ -1543,13 +1531,13 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
               case t: TypeRef => 
                 val exparams = existentialParams.toList
                 val wildcards = exparams map (_ => WildcardType)
-                checkTypeRef(t.subst(exparams, wildcards), tree.pos)
+                checkTypeRef(t.subst(exparams, wildcards), tree)
               case _ => 
             }
             tree
 
           case TypeApply(fn, args) =>
-            checkBounds(NoPrefix, NoSymbol, fn.tpe.typeParams, args map (_.tpe), tree.pos)
+            checkBounds(tree, NoPrefix, NoSymbol, fn.tpe.typeParams, args map (_.tpe))
             transformCaseApply(tree, ())
 
           case x @ Apply(_, _)  =>

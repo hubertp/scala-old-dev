@@ -303,10 +303,8 @@ trait NamesDefaults { self: Analyzer =>
     } else tree match {
       // `fun` is typed. `namelessArgs` might be typed or not, if they are types are kept.
       case Apply(fun, namelessArgs) =>
-        val transformedFun = transformNamedApplication(typer, mode, pt)(fun, x => x)
-        // Is it safe to replace containsError() with containsErrorOrIsErrorTyped()?
-        if (transformedFun.containsError()) transformedFun 
-        else if (transformedFun.isErroneous) NullErrorTree
+        val transformedFun = transformNamedApplication(typer, mode, pt)(fun, x => x) 
+        if (transformedFun.isErroneous) setError(tree)
         else {
           assert(isNamedApplyBlock(transformedFun), transformedFun)
           val NamedApplyInfo(qual, targs, vargss, blockTyper) =
@@ -315,7 +313,7 @@ trait NamesDefaults { self: Analyzer =>
 
           // type the application without names; put the arguments in definition-site order
           val typedApp = doTypedApply(tree, funOnly, reorderArgs(namelessArgs, argPos), mode, pt)
-          if (typedApp.containsErrorOrIsErrorTyped()) typedApp
+          if (typedApp.isErrorTyped) tree
           else typedApp match {
             // Extract the typed arguments, restore the call-site evaluation order (using
             // ValDef's in the block), change the arguments to these local values.
@@ -384,6 +382,7 @@ trait NamesDefaults { self: Analyzer =>
       if (missing forall (_.hasDefaultFlag)) {
         val defaultArgs = missing flatMap (p => {
           val defGetter = defaultGetter(p, context)
+          // TODO #3649 can create spurious errors when companion object is gone (unlinked from scope)
           if (defGetter == NoSymbol) None // prevent crash in erroneous trees, #3649
           else {
             var default1 = qual match {
@@ -440,6 +439,9 @@ trait NamesDefaults { self: Analyzer =>
    * after named ones.
    */
   def removeNames(typer: Typer)(args: List[Tree], params: List[Symbol]): (List[Tree], Array[Int]) = {
+    import NamesDefaultsErrorGenerator._
+    implicit val context0 = typer.context
+    
 
     // maps indicies from (order written by user) to (order of definition)
     val argPos = (new Array[Int](args.length)) map (x => -1)
@@ -478,8 +480,8 @@ trait NamesDefaults { self: Analyzer =>
               case _ => super.apply(tp)
             }
           }
-          val reportAmbiguousErrors = typer.context.reportAmbiguousErrors
-          typer.context.reportAmbiguousErrors = false
+          val reportAmbiguousErrors = typer.context.ambiguousErrors
+          typer.context.setAmbiguousErrors(false)
 
           val typedAssign = try {
             typer.silent(_.typed(arg, subst(paramtpe)))
@@ -487,14 +489,12 @@ trait NamesDefaults { self: Analyzer =>
             // `silent` only catches and returns TypeErrors which are not
             // CyclicReferences.  Fix for #3685
 
-            // Returning CyclicReference error trees is problematic
-            // so we stay with throwing exceptions
             case cr @ CyclicReference(sym, info) if sym.name == param.name =>
-              if (sym.isVariable || sym.isGetter && sym.accessed.isVariable) {
+              Left(if (sym.isVariable || sym.isGetter && sym.accessed.isVariable) {
                 // named arg not allowed
                 NameClashError(sym, arg)
               }
-              else NullErrorTree
+              else NamedArgWithCyclicRef(cr))
           }
 
           def applyNamedArg = {
@@ -507,15 +507,14 @@ trait NamesDefaults { self: Analyzer =>
           }
 
           val res = typedAssign match {
-            case err: NameClashError =>
-              err
-            case _: TypeError =>
-              // TODO: is should be safe to remove this case after error trees are fully implemented
+            case Left(err) if (err.kind == ErrorKinds.NameClash) =>
+              ErrorGeneratorUtils.issueTypeError(err)
+              typer.infer.setError(arg)
+            case Left(_) =>
               applyNamedArg
-            case t: Tree if t.containsErrorOrIsErrorTyped() =>
-              // containsErrorOrIsErrorTyped() needed because of for instance #4041
+            case Right(t) if t.isErroneous => // #4041
               applyNamedArg
-            case t: Tree =>
+            case Right(_) =>
               // This throws an exception which is caught in `tryTypedApply` (as it
               // uses `silent`) - unfortunately, tryTypedApply recovers from the
               // exception if you use errorTree(arg, ...) and conforms is allowed as
@@ -530,9 +529,7 @@ trait NamesDefaults { self: Analyzer =>
               AmbiguousReferenceInNamesDefaultError(arg, name)
           }
 
-          typer.context.reportAmbiguousErrors = reportAmbiguousErrors
-          //@M note that we don't get here when an ambiguity was detected (during the computation of res),
-          // as errorTree throws an exception
+          typer.context.setAmbiguousErrors(reportAmbiguousErrors)
           typer.context.undetparams = udp
           res
         }

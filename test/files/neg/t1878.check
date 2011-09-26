@@ -1,3 +1,6 @@
+t1878.scala:3: error: _* may only come last
+  val err1 = "" match { case Seq(f @ _*, ',') => f }
+                                 ^
 t1878.scala:3: error: scrutinee is incompatible with pattern type;
  found   : Seq[A]
  required: java.lang.String
@@ -6,9 +9,6 @@ t1878.scala:3: error: scrutinee is incompatible with pattern type;
 t1878.scala:3: error: not found: value f
   val err1 = "" match { case Seq(f @ _*, ',') => f }
                                                  ^
-t1878.scala:3: error: _* may only come last
-  val err1 = "" match { case Seq(f @ _*, ',') => f }
-                                 ^
 t1878.scala:9: error: _* may only come last
   val List(List(_*, arg2), _) = List(List(1,2,3), List(4,5,6))
                  ^

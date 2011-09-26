@@ -44,7 +44,7 @@ trait Trees extends reflect.internal.Trees { self: Global =>
   }
   
   /** emitted by typer, eliminated by refchecks */
-  case class TypeTreeWithDeferredRefCheck()(val check: () => Either[AbsErrorTree, TypeTree]) extends TypTree {
+  case class TypeTreeWithDeferredRefCheck()(val check: () => TypeTree) extends TypTree {
   }
   
   // --- factory methods ----------------------------------------------------------
