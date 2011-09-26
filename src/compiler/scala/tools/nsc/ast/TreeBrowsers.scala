@@ -33,17 +33,19 @@ abstract class TreeBrowsers {
 
   val borderSize = 10
 
-
   def create(): SwingBrowser = new SwingBrowser();
-
-  /** Pseudo tree class, so that all JTree nodes are treated uniformly */
-  case class ProgramTree(units: List[UnitTree]) extends Tree {
-    override def toString(): String = "Program"
+  
+  trait ValidTree extends Tree {
   }
 
   /** Pseudo tree class, so that all JTree nodes are treated uniformly */
-  case class UnitTree(unit: CompilationUnit) extends Tree {
-    override def toString(): String = unit.toString()
+  case class ProgramTree(units: List[UnitTree]) extends ValidTree {
+    override def toString: String = "Program"
+  }
+
+  /** Pseudo tree class, so that all JTree nodes are treated uniformly */
+  case class UnitTree(unit: CompilationUnit) extends ValidTree {
+    override def toString: String = unit.toString
   }
 
   /**
@@ -490,6 +492,9 @@ abstract class TreeBrowsers {
 
       case Star(t) =>
         ("Star", EMPTY)
+        
+      case _: AbsErrorTree =>
+        ("ErrorTree", EMPTY)
     }
 
     /** Return a list of children for the given tree node */
@@ -631,6 +636,9 @@ abstract class TreeBrowsers {
 
       case Star(t) =>
         List(t)
+
+      case _: AbsErrorTree =>
+        Nil
     }
 
     /** Return a textual representation of this t's symbol */
