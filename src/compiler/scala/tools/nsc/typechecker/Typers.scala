@@ -515,11 +515,11 @@ trait Typers extends Modes with Adaptations {
           // fails to notice exhaustiveness and to generate good code when
           // List extractors are mixed with :: patterns. See Test5 in lists.scala.
           def dealias(sym: Symbol) =
-            ({ val t = gen.mkAttributedRef(sym) ; t.setPos(tree.pos) ; t }, sym.owner.thisType)
+            (atPos(tree.pos) {gen.mkAttributedRef(sym)}, sym.owner.thisType)
           sym.name match {
             case nme.List => return dealias(ListModule)
-            case nme.Seq => return dealias(SeqModule)
-            case nme.Nil => return dealias(NilModule)
+            case nme.Seq  => return dealias(SeqModule)
+            case nme.Nil  => return dealias(NilModule)
             case _ =>
           }
         }
