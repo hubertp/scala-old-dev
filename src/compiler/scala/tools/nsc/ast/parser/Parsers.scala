@@ -2681,7 +2681,7 @@ self =>
           else List(
             AppliedTypeTree(
               productConstrN(arity),
-              vparamss.head map (vd => vd.tpt)
+              vparamss.head map (vd => vd.tpt.duplicate setPos vd.tpt.pos.focus)
             )
           )
         }
@@ -2714,7 +2714,6 @@ self =>
             if (mods.isCase) List(productConstr, serializableConstr) ++ extraCaseParents
             else Nil
           )
-
           Template(parents, self, constrMods, vparamss, argss, body, o2p(tstart))
         }
       }

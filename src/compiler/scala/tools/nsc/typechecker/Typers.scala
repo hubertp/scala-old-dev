@@ -1380,7 +1380,7 @@ trait Typers extends Modes with Adaptations {
         if (linkedClass == NoSymbol || !linkedClass.isSerializable || clazz.isSerializable) l
         else {
           clazz.makeSerializable()
-          l :+ TypeTree(SerializableClass.tpe)
+          l :+ (TypeTree(SerializableClass.tpe) setPos clazz.pos.focus)
         }
       val typedMods = removeAnnotations(mdef.mods)
       assert(clazz != NoSymbol)
