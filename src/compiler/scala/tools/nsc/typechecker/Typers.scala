@@ -810,7 +810,8 @@ trait Typers extends Modes with Adaptations {
           tree setType tree.tpe
         } else tree match { // (6)
           case TypeTree() => tree
-          case _          => TypeTree(tree.tpe) setOriginal (tree)
+          case _          =>
+            TypeTree(tree.tpe) setOriginal (tree) setPos (tree.pos)
         }
       }
       
@@ -3733,7 +3734,7 @@ trait Typers extends Modes with Adaptations {
                   // will execute during refchecks -- TODO: make private checkTypeRef in refchecks public and call that one?
                   checkBounds(qual.pos, tp.prefix, sym.owner, sym.typeParams, tp.typeArgs, "")
                   qual // you only get to see the wrapped tree after running this check :-p
-                }) setType qual.tpe,
+                }) setType qual.tpe setPos qual.pos,
                 name)
             case accErr: Inferencer#AccessError => 
               val qual1 =
@@ -3979,13 +3980,13 @@ trait Typers extends Modes with Adaptations {
             val original = treeCopy.AppliedTypeTree(tree, tpt1, args1)
             val result = TypeTree(appliedType(tpt1.tpe, argtypes)) setOriginal  original
             if(tpt1.tpe.isInstanceOf[PolyType]) // did the type application (performed by appliedType) involve an unchecked beta-reduction?
-              (TypeTreeWithDeferredRefCheck(){ () =>
+              TypeTreeWithDeferredRefCheck(){ () =>
                 // wrap the tree and include the bounds check -- refchecks will perform this check (that the beta reduction was indeed allowed) and unwrap
                 // we can't simply use original in refchecks because it does not contains types
                 // (and the only typed trees we have have been mangled so they're not quite the original tree anymore)
                 checkBounds(result.pos, tpt1.tpe.prefix, tpt1.symbol.owner, tpt1.symbol.typeParams, argtypes, "")
                 result // you only get to see the wrapped tree after running this check :-p
-              }).setType(result.tpe)
+              } setType (result.tpe) setPos(result.pos)
             else result
           } else if (tparams.isEmpty) {
             errorTree(tree, tpt1.tpe+" does not take type parameters")
