@@ -523,7 +523,7 @@ trait Typers extends Modes with Adaptations {
             case _ =>
           }
         }
-        val qual = typedQualifier { atPos(tree.pos.focusStart) {
+        val qual = typedQualifier { atPos(tree.pos.makeTransparent) {
           tree match {
             case Ident(_) => Ident(nme.PACKAGEkw)
             case Select(qual, _) => Select(qual, nme.PACKAGEkw)
