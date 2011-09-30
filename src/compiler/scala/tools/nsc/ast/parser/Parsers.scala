@@ -905,7 +905,11 @@ self =>
       }
       def simpleTypeRest(t: Tree): Tree = in.token match {
         case HASH     => simpleTypeRest(typeProjection(t))
-        case LBRACKET => simpleTypeRest(atPos(t.pos.startOrPoint)(AppliedTypeTree(t, typeArgs())))
+        case LBRACKET =>
+          simpleTypeRest{
+            val tArgs = typeArgs()
+            val endPosTypeArgs = if (tArgs.isEmpty) t.pos.endOrPoint else tArgs.last.pos.endOrPoint
+            atPos(r2p(t.pos.startOrPoint, t.pos.point, endPosTypeArgs max in.offset))(AppliedTypeTree(t, tArgs))}
         case _        => t
       }
       
