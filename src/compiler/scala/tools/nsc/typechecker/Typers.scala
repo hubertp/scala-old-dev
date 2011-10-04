@@ -810,8 +810,7 @@ trait Typers extends Modes with Adaptations {
           tree setType tree.tpe
         } else tree match { // (6)
           case TypeTree() => tree
-          case _          =>
-            TypeTree(tree.tpe) setOriginal (tree) setPos (tree.pos)
+          case _          => TypeTree(tree.tpe) setOriginal (tree) setPos (tree.pos)
         }
       }
       

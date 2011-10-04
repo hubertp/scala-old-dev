@@ -239,9 +239,8 @@ self: scala.tools.nsc.Global =>
       }
     }
 
-    if (phase.id <= currentRun.typerPhase.id) {
+    if (phase.id <= currentRun.typerPhase.id)
       validate(tree, tree)
-    }
   }
 
   class ValidateException(msg : String) extends Exception(msg)
