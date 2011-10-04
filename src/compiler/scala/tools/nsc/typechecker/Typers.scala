@@ -3849,7 +3849,7 @@ trait Typers extends Modes with Adaptations {
           if (defSym.exists && impSym.exists) {
             // imported symbols take precedence over package-owned symbols in different
             // compilation units. Defined symbols take precedence over erroneous imports.
-            if (defSym.definedInPackage && 
+            if (defSym.isDefinedInPackage &&
                 (!currentRun.compiles(defSym) ||
                  context.unit.exists && defSym.sourceFile != context.unit.source.file))
               defSym = NoSymbol
