@@ -2213,7 +2213,7 @@ trait Typers extends Modes with Adaptations {
       def includesTargetPos(tree: Tree) = 
         tree.pos.isRange && context.unit.exists && (tree.pos includes context.unit.targetPos)
       val localTarget = stats exists includesTargetPos
-      val statsErrors = ListBuffer[AbsTypeError]()
+      val statsErrors = scala.collection.mutable.LinkedHashSet[AbsTypeError]()
       def typedStat(stat: Tree): Tree = {
         if (context.owner.isRefinementClass && !treeInfo.isDeclarationOrTypeDef(stat))
           OnlyDeclarationsError(stat)

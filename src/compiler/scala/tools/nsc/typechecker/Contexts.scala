@@ -7,7 +7,7 @@ package scala.tools.nsc
 package typechecker
 
 import symtab.Flags._
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.LinkedHashSet
 import annotation.tailrec
 
 /**
@@ -150,7 +150,10 @@ trait Contexts { self: Analyzer =>
     }
     
     private var mode = 0
-    private[this] val buffer = ListBuffer[AbsTypeError]()
+    // use Set since we want to avoid the duplicates
+    // previously ListBuffer was used but it had to implement logic that avoids duplicates
+    // TODO check performance of both
+    private[this] val buffer = LinkedHashSet[AbsTypeError]()
     
     def errBuffer = buffer
     def hasErrors = errBuffer.nonEmpty
@@ -158,10 +161,10 @@ trait Contexts { self: Analyzer =>
     def state: Int = mode
     def restoreState(state0: Int) = mode = state0
     
-    def reportErrors    = (state & ReportErrors) != 0
-    def bufferErrors    = (state & BufferErrors) != 0
+    def reportErrors    = (state & ReportErrors)     != 0
+    def bufferErrors    = (state & BufferErrors)     != 0
     def ambiguousErrors = (state & AmbiguousErrors)  != 0
-    def throwErrors     = (state & notThrowMask) == 0
+    def throwErrors     = (state & notThrowMask)     == 0
     
     def setReportErrors()    = mode = (ReportErrors | AmbiguousErrors)
     def setBufferErrors()    = {
@@ -171,8 +174,8 @@ trait Contexts { self: Analyzer =>
     def setThrowErrors()     = mode &= (~AllMask)
     def setAmbiguousErrors(report: Boolean) = if (report) mode |= AmbiguousErrors else mode &= notThrowMask
     
-    def updateBuffer(context0: Context) = errBuffer ++= (context0.errBuffer -- errBuffer)
-    def updateBuffer(errors: ListBuffer[AbsTypeError]) = errBuffer ++= errors    
+    def updateBuffer(context0: Context) = errBuffer ++= context0.errBuffer
+    def updateBuffer(errors: LinkedHashSet[AbsTypeError]) = errBuffer ++= errors    
     
     def logError(err: AbsTypeError) {
       assert(bufferErrors, "errors can be put into context's buffer iff we are in silent mode")
@@ -186,7 +189,7 @@ trait Contexts { self: Analyzer =>
       errBuffer --= elems
     }
     
-    def flushAndReturnBuffer(): ListBuffer[AbsTypeError] = {
+    def flushAndReturnBuffer(): LinkedHashSet[AbsTypeError] = {
       val current = errBuffer.clone()
       errBuffer.clear()
       current
@@ -318,7 +321,7 @@ trait Contexts { self: Analyzer =>
 
     def issue(err: AbsTypeError) {
       if (reportErrors) unitError(err.errPos, addDiagString(err.errMsg))
-      else if (bufferErrors) { if (!buffer.contains(err)) buffer += err }
+      else if (bufferErrors) { buffer += err }
       else throw new TypeError(err.errPos, err.errMsg) 
     }
     
@@ -326,14 +329,14 @@ trait Contexts { self: Analyzer =>
       if (ambiguousErrors) {
         if (!pre.isErroneous && !sym1.isErroneous && !sym2.isErroneous)
           unitError(err.errPos, err.errMsg)
-      } else if (bufferErrors) { if (!buffer.contains(err)) buffer += err }
+      } else if (bufferErrors) { buffer += err }
       else throw new TypeError(err.errPos, err.errMsg)
     }
     
     def issueAmbiguousError(err: AbsTypeError) {
       if (ambiguousErrors)
         unitError(err.errPos, addDiagString(err.errMsg))
-      else if (bufferErrors) { if (!buffer.contains(err)) buffer += err }
+      else if (bufferErrors) { buffer += err }
       else throw new TypeError(err.errPos, err.errMsg)
     }
       
