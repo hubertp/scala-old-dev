@@ -1713,9 +1713,9 @@ trait Infer {
             if (improves(alt, best)) alt else best)
           val competing = applicable.dropWhile(alt => best == alt || improves(best, alt))
           if (best == NoSymbol) {
-            if (pt == WildcardType) {
+            if (pt == WildcardType)
               NoBestMethodAlternativeError(tree, argtpes, pt)
-            } else
+            else
               inferMethodAlternative(tree, undetparams, argtpes, WildcardType)
           } else if (!competing.isEmpty) {
             if (!(argtpes exists (_.isErroneous)) && !pt.isErroneous)

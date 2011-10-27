@@ -93,7 +93,6 @@ trait Contexts { self: Analyzer =>
     final val AmbiguousErrors  = 1 << 2
     final val notThrowMask     = ReportErrors | BufferErrors
     final val AllMask          = ReportErrors | BufferErrors | AmbiguousErrors
-    
   }
 
   class Context private[typechecker] {
