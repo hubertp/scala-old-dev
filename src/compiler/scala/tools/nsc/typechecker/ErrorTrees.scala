@@ -443,6 +443,15 @@ trait ErrorTrees {
         issueNormalTypeError(tree, "too many arguments for "+treeSymTypeMsg(fun))
         setError(tree)
       }
+      
+      // can it still happen? see test case neg/t960.scala
+      def OverloadedUnapplyError(tree: Tree) = {
+        issueNormalTypeError(tree, "cannot resolve overloaded unapply")
+      }
+      
+      def UnapplyWithSingleArgError(tree: Tree) = {
+        issueNormalTypeError(tree, "an unapply method must accept a single argument.")
+      }
 
       def MultipleVarargError(tree: Tree) = {
         issueNormalTypeError(tree, "when using named arguments, the vararg parameter has to be specified exactly once")
@@ -515,8 +524,8 @@ trait ErrorTrees {
       def ParentFinalInheritanceError(parent: Tree, mixin: Symbol) =
         NormalTypeError(parent, "illegal inheritance from final "+mixin)
 
-      def ParentSealedInheritanceError(parent: Tree, mixin: Symbol) =
-        NormalTypeError(parent, "illegal inheritance from sealed "+mixin)
+      def ParentSealedInheritanceError(parent: Tree, psym: Symbol) =
+        NormalTypeError(parent, "illegal inheritance from sealed "+psym+": " + context.unit.source.file + " != " + psym.sourceFile)
 
       def ParentSelfTypeConformanceError(parent: Tree, selfType: Type) =
         NormalTypeError(parent, 
@@ -652,10 +661,9 @@ trait ErrorTrees {
 
       def AccessError(tree: Tree, sym: Symbol, pre: Type, owner0: Symbol, explanation: String) = {
         def errMsg = {
-          val realsym  = underlying(sym)
           val location = if (sym.isClassConstructor) owner0 else pre.widen
   
-          realsym.fullLocationString + " cannot be accessed in " +
+          underlying(sym).fullLocationString + " cannot be accessed in " +
           location + explanation
         }
         NormalTypeError(tree, errMsg, ErrorKinds.Access)
@@ -831,8 +839,8 @@ trait ErrorTrees {
                                (isView: Boolean, pt: Type, tree: Tree)(implicit context0: Context) = {
       if (!info1.tpe.isErroneous && !info2.tpe.isErroneous) {
         val coreMsg = 
-          pre1+" "+info1.sym+info1.sym.locationString+" of type "+info1.tpe+"\n "+
-          pre2+" "+info2.sym+info2.sym.locationString+" of type "+info2.tpe+"\n "+
+          pre1+" "+info1.sym+info1.sym.fullLocationString+" of type "+info1.tpe+"\n "+
+          pre2+" "+info2.sym+info2.sym.fullLocationString+" of type "+info2.tpe+"\n "+
           trailer
         val errMsg = 
           if (isView) {
@@ -874,7 +882,7 @@ trait ErrorTrees {
     def DivergingImplicitExpansionError(tree: Tree, pt: Type, sym: Symbol)(implicit context0: Context) = 
       issueDivergentImplicitsError(tree,
           "diverging implicit expansion for type "+pt+"\nstarting with "+
-          sym+sym.locationString)
+          sym.fullLocationString)
   }
 
   object NamesDefaultsErrorGenerator {

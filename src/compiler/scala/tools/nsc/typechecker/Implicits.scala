@@ -182,13 +182,8 @@ trait Implicits {
     private val hasMemberCache = perRunCaches.newMap[Name, Type]()
     def apply(name: Name): Type = hasMemberCache.getOrElseUpdate(name, memberWildcardType(name, WildcardType))
     def unapply(pt: Type): Option[Name] = pt match {
-      case RefinedType(List(WildcardType), decls) =>
-        decls.toList match {
-          case List(sym) if sym.tpe == WildcardType => Some(sym.name)
-          case _ => None
-        }
-      case _ =>
-        None
+      case RefinedType(List(WildcardType), Scope(sym)) if sym.tpe == WildcardType => Some(sym.name)
+      case _ => None
     }
   }
 
@@ -516,7 +511,7 @@ trait Implicits {
           return SearchFailure
         else if (!hasMatchingSymbol(itree1))
           fail("candidate implicit %s is shadowed by other implicit %s".format(
-            info.sym + info.sym.locationString, itree1.symbol + itree1.symbol.locationString))
+            info.sym.fullLocationString, itree1.symbol.fullLocationString))
         else {
           val tvars = undetParams map freshVar
           if (matchesPt(itree2.tpe, pt.instantiateTypeParams(undetParams, tvars), undetParams)) {
@@ -542,7 +537,7 @@ trait Implicits {
             // filter out failures from type inference, don't want to remove them from undetParams!
             // we must be conservative in leaving type params in undetparams
             // prototype == WildcardType: want to remove all inferred Nothings
-            val AdjustedTypeArgs(okParams, okArgs) = adjustTypeArgs(undetParams, targs)
+            val AdjustedTypeArgs(okParams, okArgs) = adjustTypeArgs(undetParams, tvars, targs)
             val subst: TreeTypeSubstituter =
               if (okParams.isEmpty) EmptyTreeTypeSubstituter
               else {
@@ -1156,7 +1151,6 @@ trait Implicits {
         stopTimer(inscopeSucceedNanos, succstart)
         incCounter(inscopeImplicitHits)
       }
-
       if (result == SearchFailure) {
         val previous = context.flushAndReturnBuffer()
         val failstart = startTimer(oftypeFailNanos)

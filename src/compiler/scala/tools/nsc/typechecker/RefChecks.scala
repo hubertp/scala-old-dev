@@ -151,12 +151,6 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
 
 // Override checking ------------------------------------------------------------
 
-    def hasRepeatedParam(tp: Type): Boolean = tp match {
-      case MethodType(formals, restpe) => isScalaVarArgs(formals) || hasRepeatedParam(restpe)
-      case PolyType(_, restpe)         => hasRepeatedParam(restpe)
-      case _                           => false
-    }
-
     /** Add bridges for vararg methods that extend Java vararg methods
      */
     def addVarargBridges(clazz: Symbol): List[Tree] = {
@@ -253,7 +247,7 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
       def infoStringWithLocation(sym: Symbol) = infoString0(sym, true)
 
       def infoString0(sym: Symbol, showLocation: Boolean) = {
-        val sym1 = analyzer.underlying(sym)
+        val sym1 = analyzer.underlyingSymbol(sym)
         sym1.toString() + 
         (if (showLocation) 
           sym1.locationString + 
@@ -287,6 +281,8 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
                 infoStringWithLocation(other),
                 infoStringWithLocation(member)
               )
+            else if (settings.debug.value)
+              analyzer.foundReqMsg(member.tpe, other.tpe)
             else ""
           
           "overriding %s;\n %s %s%s".format(
@@ -520,32 +516,63 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
         )
 
         // 2. Check that only abstract classes have deferred members
-        def checkNoAbstractMembers() = {
+        def checkNoAbstractMembers(): Unit = {
           // Avoid spurious duplicates: first gather any missing members.
-          def memberList = clazz.tpe.nonPrivateMembersAdmitting(VBRIDGE)
+          def memberList = clazz.info.nonPrivateMembersAdmitting(VBRIDGE)
           val (missing, rest) = memberList partition (m => m.isDeferred && !ignoreDeferred(m))
-          // Group missing members by the underlying symbol.
-          val grouped = missing groupBy (analyzer underlying _ name)
+          // Group missing members by the name of the underlying symbol,
+          // to consolidate getters and setters.
+          val grouped = missing groupBy (sym => analyzer.underlyingSymbol(sym).name)
+          val missingMethods = grouped.toList map {
+            case (name, sym :: Nil) => sym
+            case (name, syms)       => syms.sortBy(!_.isGetter).head
+          }
+
+          def stubImplementations: List[String] = {
+            // Grouping missing methods by the declaring class
+            val regrouped = missingMethods.groupBy(_.owner).toList
+            def membersStrings(members: List[Symbol]) =
+              members.sortBy("" + _.name) map (m => m.defStringSeenAs(clazz.tpe memberType m) + " = ???")
+
+            if (regrouped.tail.isEmpty)
+              membersStrings(regrouped.head._2)
+            else (regrouped.sortBy("" + _._1.name) flatMap {
+              case (owner, members) =>
+                ("// Members declared in " + owner.fullName) +: membersStrings(members) :+ ""
+            }).init
+          }
+
+          // If there are numerous missing methods, we presume they are aware of it and
+          // give them a nicely formatted set of method signatures for implementing.
+          if (missingMethods.size > 1) {
+            abstractClassError(false, "it has " + missingMethods.size + " unimplemented members.")
+            val preface =
+              """|/** As seen from %s, the missing signatures are as follows.
+                 | *  For convenience, these are usable as stub implementations.
+                 | */
+                 |""".stripMargin.format(clazz)
+            abstractErrors += stubImplementations.map("  " + _ + "\n").mkString(preface, "", "")
+            return
+          }
 
           for (member <- missing) {
             def undefined(msg: String) = abstractClassError(false, infoString(member) + " is not defined" + msg)
-            val underlying = analyzer.underlying(member)
+            val underlying = analyzer.underlyingSymbol(member)
 
             // Give a specific error message for abstract vars based on why it fails:
             // It could be unimplemented, have only one accessor, or be uninitialized.
             if (underlying.isVariable) {
+              val isMultiple = grouped.getOrElse(underlying.name, Nil).size > 1
+
               // If both getter and setter are missing, squelch the setter error.
-              val isMultiple = grouped(underlying.name).size > 1
-              // TODO: messages shouldn't be spread over two files, and varNotice is not a clear name
               if (member.isSetter && isMultiple) ()
               else undefined(
                 if (member.isSetter) "\n(Note that an abstract var requires a setter in addition to the getter)"
                 else if (member.isGetter && !isMultiple) "\n(Note that an abstract var requires a getter in addition to the setter)"
-                else analyzer.varNotice(member)
+                else analyzer.abstractVarMessage(member)
               )
             }
             else if (underlying.isMethod) {
-
               // If there is a concrete method whose name matches the unimplemented
               // abstract method, and a cursory examination of the difference reveals
               // something obvious to us, let's make it more obvious to them.
@@ -626,7 +653,7 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
               val impl = decl.matchingSymbol(clazz.thisType, admit = VBRIDGE)
               if (impl == NoSymbol || (decl.owner isSubClass impl.owner)) {
                 abstractClassError(false, "there is a deferred declaration of "+infoString(decl)+
-                                   " which is not implemented in a subclass"+analyzer.varNotice(decl))
+                                   " which is not implemented in a subclass"+analyzer.abstractVarMessage(decl))
               }
             }
           }
@@ -766,6 +793,9 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
 
       /** Validate variance of info of symbol `base` */
       private def validateVariance(base: Symbol) {
+        // A flag for when we're in a refinement, meaning method parameter types
+        // need to be checked.
+        var inRefinement = false
 
         def varianceString(variance: Int): String =
           if (variance == 1) "covariant"
@@ -849,12 +879,17 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
             validateVariances(parents, variance)
           case RefinedType(parents, decls) =>
             validateVariances(parents, variance)
+            val saved = inRefinement
+            inRefinement = true
             for (sym <- decls)
               validateVariance(sym.info, if (sym.isAliasType) NoVariance else variance)
+            inRefinement = saved
           case TypeBounds(lo, hi) =>
             validateVariance(lo, -variance)
             validateVariance(hi, variance)
           case MethodType(formals, result) =>
+            if (inRefinement)
+              validateVariances(formals map (_.tpe), -variance)
             validateVariance(result, variance)
           case NullaryMethodType(result) =>
             validateVariance(result, variance)
@@ -865,7 +900,7 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
             validateVariances(tparams map (_.info), variance)
             validateVariance(result, variance)
           case AnnotatedType(annots, tp, selfsym) =>
-            if (!(annots exists (_.atp.typeSymbol.isNonBottomSubClass(uncheckedVarianceClass))))
+            if (!annots.exists(_ matches uncheckedVarianceClass))
               validateVariance(tp, variance)
         }
 
@@ -891,9 +926,10 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
           // ModuleDefs need not be considered because they have been eliminated already
           case ValDef(_, _, _, _) =>
             validateVariance(tree.symbol)
-          case DefDef(_, _, tparams, vparamss, tpt, rhs) =>
+          case DefDef(_, _, tparams, vparamss, _, _) =>
             validateVariance(tree.symbol)
-            traverseTrees(tparams); traverseTreess(vparamss)
+            traverseTrees(tparams)
+            traverseTreess(vparamss)
           case Template(_, _, _) =>
             super.traverse(tree)
           case _ =>
@@ -981,7 +1017,7 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
         def typesString = normalizeAll(qual.tpe.widen)+" and "+normalizeAll(args.head.tpe.widen)
         
         /** Symbols which limit the warnings we can issue since they may be value types */
-        val isMaybeValue = Set(AnyClass, AnyRefClass, AnyValClass, ObjectClass, ComparableClass, SerializableClass)
+        val isMaybeValue = Set(AnyClass, AnyRefClass, AnyValClass, ObjectClass, ComparableClass, JavaSerializableClass)
 
         // Whether def equals(other: Any) is overridden
         def isUsingDefaultEquals      = {
@@ -999,6 +1035,7 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
         def isBoolean(s: Symbol) = unboxedValueClass(s) == BooleanClass
         def isUnit(s: Symbol)    = unboxedValueClass(s) == UnitClass
         def isNumeric(s: Symbol) = isNumericValueClass(unboxedValueClass(s)) || (s isSubClass ScalaNumberClass)
+        def isSpecial(s: Symbol) = isValueClass(unboxedValueClass(s)) || (s isSubClass ScalaNumberClass) || isMaybeValue(s)
         def possibleNumericCount = onSyms(_ filter (x => isNumeric(x) || isMaybeValue(x)) size)
         val nullCount            = onSyms(_ filter (_ == NullClass) size)
         
@@ -1052,7 +1089,8 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
           }
         }
 
-        if (nullCount == 0 && possibleNumericCount < 2) {
+        // possibleNumericCount is insufficient or this will warn on e.g. Boolean == j.l.Boolean
+        if (nullCount == 0 && !(isSpecial(receiver) && isSpecial(actual))) {
           if (actual isSubClass receiver) ()
           else if (receiver isSubClass actual) ()
           // warn only if they have no common supertype below Object
@@ -1098,14 +1136,13 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
      */
     private def eliminateModuleDefs(tree: Tree): List[Tree] = {
       val ModuleDef(mods, name, impl) = tree
-      val sym = tree.symbol
-
-      val classSym        = sym.moduleClass
-      val cdef            = ClassDef(mods | MODULE, name.toTypeName, Nil, impl) setSymbol classSym setType NoType
+      val sym      = tree.symbol
+      val classSym = sym.moduleClass
+      val cdef     = ClassDef(mods | MODULE, name.toTypeName, Nil, impl) setSymbol classSym setType NoType
 
       def findOrCreateModuleVar() = localTyper.typedPos(tree.pos) {
         lazy val createModuleVar = gen.mkModuleVarDef(sym)
-        sym.owner.info.decl(nme.moduleVarName(sym.name.toTermName)) match {
+        sym.enclClass.info.decl(nme.moduleVarName(sym.name.toTermName)) match {
           // In case we are dealing with local symbol then we already have
           // to correct error with forward reference
           case NoSymbol => createModuleVar
@@ -1115,7 +1152,9 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
       def createStaticModuleAccessor() = atPhase(phase.next) {
         val method = (
           sym.owner.newMethod(sym.pos, sym.name.toTermName)
-          setFlag (sym.flags | STABLE) resetFlag MODULE setInfo NullaryMethodType(sym.moduleClass.tpe)
+            setFlag (sym.flags | STABLE)
+            resetFlag MODULE
+            setInfo NullaryMethodType(sym.moduleClass.tpe)
         )
         sym.owner.info.decls enter method
         localTyper.typedPos(tree.pos)(gen.mkModuleAccessDef(method, sym))
@@ -1178,8 +1217,7 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
         else {
           val lazySym = tree.symbol.lazyAccessorOrSelf
           if (lazySym.isLocal && index <= currentLevel.maxindex) {
-            if (settings.debug.value)
-              Console.println(currentLevel.refsym)
+            debuglog("refsym = " + currentLevel.refsym)
             unit.error(currentLevel.refpos, "forward reference extends over definition of " + lazySym)
           }
           List(tree1)

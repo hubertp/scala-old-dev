@@ -7,6 +7,7 @@ package scala.reflect
 package internal
 
 import scala.collection.immutable
+import NameTransformer.MODULE_SUFFIX_STRING
 
 trait StdNames extends /*reflect.generic.StdNames with*/ NameManglers { self: SymbolTable =>
     
@@ -94,8 +95,10 @@ trait StdNames extends /*reflect.generic.StdNames with*/ NameManglers { self: Sy
     val IMPORT: NameType             = "<import>"
     val MODULE_VAR_SUFFIX: NameType  = "$module"
     val ROOT: NameType               = "<root>"
-      
-    // value types are all used as terms as well
+    val PACKAGE: NameType            = "package"
+
+    // value types (and AnyRef) are all used as terms as well
+    // as (at least) arguments to the @specialize annotation.
     final val Boolean: NameType = "Boolean"
     final val Byte: NameType    = "Byte"
     final val Char: NameType    = "Char"
@@ -109,7 +112,8 @@ trait StdNames extends /*reflect.generic.StdNames with*/ NameManglers { self: Sy
     final val ScalaValueNames: scala.List[NameType] =
       scala.List(Byte, Char, Short, Int, Long, Float, Double, Boolean, Unit)
     
-    // types whose companions we utilize
+    // some types whose companions we utilize
+    final val AnyRef: NameType = "AnyRef"
     final val Array: NameType  = "Array"
     final val List: NameType   = "List"
     final val Seq: NameType    = "Seq"
@@ -130,7 +134,6 @@ trait StdNames extends /*reflect.generic.StdNames with*/ NameManglers { self: Sy
     final val WILDCARD_STAR: NameType                  = "_*"
     
     final val Any: NameType             = "Any"
-    final val AnyRef: NameType          = "AnyRef"
     final val AnyVal: NameType          = "AnyVal"
     final val Nothing: NameType         = "Nothing"
     final val Null: NameType            = "Null"
@@ -143,7 +146,12 @@ trait StdNames extends /*reflect.generic.StdNames with*/ NameManglers { self: Sy
     final val String: NameType          = "String"
     final val Throwable: NameType       = "Throwable"
 
-    // Annotation types
+    // Annotation simple names, used in Namer
+    final val BeanPropertyAnnot: NameType = "BeanProperty"
+    final val BooleanBeanPropertyAnnot: NameType = "BooleanBeanProperty"
+    final val bridgeAnnot: NameType = "bridge"
+
+    // Classfile Attributes
     final val AnnotationDefaultATTR: NameType      = "AnnotationDefault"
     final val BridgeATTR: NameType                 = "Bridge"
     final val ClassfileAnnotationATTR: NameType    = "RuntimeInvisibleAnnotations" // RetentionPolicy.CLASS. Currently not used (Apr 2009).
@@ -175,11 +183,13 @@ trait StdNames extends /*reflect.generic.StdNames with*/ NameManglers { self: Sy
     val MODULE_INSTANCE_FIELD: NameType = NameTransformer.MODULE_INSTANCE_NAME  // "MODULE$"
     val OUTER: NameType                 = "$outer"
     val OUTER_LOCAL: NameType           = "$outer " // note the space
+    val OUTER_SYNTH: NameType           = "<outer>" // emitted by virtual pattern matcher, replaced by outer accessor in explicitouter
     val SELF: NameType                  = "$this"
     val SPECIALIZED_INSTANCE: NameType  = "specInstance$"
     val STAR: NameType                  = "*"
     val THIS: NameType                  = "_$this"
-    
+    val SELECTOR_DUMMY: NameType        = "<unapply-selector>"
+
     final val Nil: NameType             = "Nil"
     final val Predef: NameType          = "Predef"
     final val ScalaRunTime: NameType    = "ScalaRunTime"
@@ -190,6 +200,7 @@ trait StdNames extends /*reflect.generic.StdNames with*/ NameManglers { self: Sy
     val TYPE_ : NameType           = "TYPE"
     val add_ : NameType            = "add"
     val anyValClass: NameType      = "anyValClass"
+    val append: NameType           = "append"
     val apply: NameType            = "apply"
     val arrayValue: NameType       = "arrayValue"
     val arraycopy: NameType        = "arraycopy"
@@ -218,6 +229,7 @@ trait StdNames extends /*reflect.generic.StdNames with*/ NameManglers { self: Sy
     val find_ : NameType           = "find"
     val flatMap: NameType          = "flatMap"
     val foreach: NameType          = "foreach"
+    val formatted: NameType        = "formatted"
     val genericArrayOps: NameType  = "genericArrayOps"
     val get: NameType              = "get"
     val hasNext: NameType          = "hasNext"
@@ -250,6 +262,7 @@ trait StdNames extends /*reflect.generic.StdNames with*/ NameManglers { self: Sy
     val productIterator: NameType  = "productIterator"
     val productPrefix: NameType    = "productPrefix"
     val readResolve: NameType      = "readResolve"
+    val runOrElse: NameType        = "runOrElse"
     val sameElements: NameType     = "sameElements"
     val scala_ : NameType          = "scala"
     val self: NameType             = "self"
@@ -351,23 +364,15 @@ trait StdNames extends /*reflect.generic.StdNames with*/ NameManglers { self: Sy
           mkName(simple, div == '.') :: segments(rest, assumeTerm)
       }
     }
-    private def bitmapName(n: Int, suffix: String): TermName =
-      newTermName(BITMAP_PREFIX + suffix + n)
     
-    /** The name of bitmaps for initialized (public or protected) lazy vals. */
-    def bitmapName(n: Int): TermName = bitmapName(n, "")
+    def newBitmapName(bitmapPrefix: Name, n: Int) = bitmapPrefix append ("" + n)
 
-    /** The name of bitmaps for initialized transient lazy vals. */
-    def bitmapNameForTransient(n: Int): TermName = bitmapName(n, "trans$")
-
-    /** The name of bitmaps for initialized private lazy vals. */
-    def bitmapNameForPrivate(n: Int): TermName = bitmapName(n, "priv$")
-
-    /** The name of bitmaps for checkinit values */
-    def bitmapNameForCheckinit(n: Int): TermName = bitmapName(n, "init$")
-   
-    /** The name of bitmaps for checkinit values that have transient flag*/
-    def bitmapNameForCheckinitTransient(n: Int): TermName = bitmapName(n, "inittrans$")
+    val BITMAP_PREFIX: String                = "bitmap$"
+    val BITMAP_NORMAL: NameType              = BITMAP_PREFIX + ""           // initialization bitmap for public/protected lazy vals
+    val BITMAP_TRANSIENT: NameType           = BITMAP_PREFIX + "trans$"     // initialization bitmap for transient lazy vals
+    val BITMAP_PRIVATE: NameType             = BITMAP_PREFIX + "priv$"      // initialization bitmap for private lazy vals
+    val BITMAP_CHECKINIT: NameType           = BITMAP_PREFIX + "init$"      // initialization bitmap for checkinit values
+    val BITMAP_CHECKINIT_TRANSIENT: NameType = BITMAP_PREFIX + "inittrans$" // initialization bitmap for transient checkinit values
     
     /** The expanded name of `name` relative to this class `base` with given `separator`
      */
@@ -381,7 +386,6 @@ trait StdNames extends /*reflect.generic.StdNames with*/ NameManglers { self: Sy
     val ROOTPKG: TermName       = "_root_"
     
     /** Base strings from which synthetic names are derived. */
-    val BITMAP_PREFIX               = "bitmap$"
     val CHECK_IF_REFUTABLE_STRING   = "check$ifrefutable$"
     val DEFAULT_GETTER_STRING       = "$default$"
     val DO_WHILE_PREFIX             = "doWhile$"
@@ -606,8 +610,8 @@ trait StdNames extends /*reflect.generic.StdNames with*/ NameManglers { self: Sy
   }
 
   private class J2SENames extends JavaNames {
-    final val BeanProperty: TypeName        = "scala.reflect.BeanProperty"
-    final val BooleanBeanProperty: TypeName = "scala.reflect.BooleanBeanProperty"
+    final val BeanProperty: TypeName        = "scala.beans.BeanProperty"
+    final val BooleanBeanProperty: TypeName = "scala.beans.BooleanBeanProperty"
     final val Code: TypeName                = "scala.reflect.Code"
     final val JavaSerializable: TypeName    = "java.io.Serializable"
   }

@@ -28,7 +28,7 @@ trait ScalaSettings extends AbsScalaSettings
    *  - Otherwise, if CLASSPATH is set, it is that
    *  - If neither of those, then "." is used.
    */
-  protected def defaultClasspath = Option(sys.props("CLASSPATH")) getOrElse "."
+  protected def defaultClasspath = sys.env.getOrElse("CLASSPATH", ".")
 
   /** Disable a setting */
   def disable(s: Setting) = allSettings -= s
@@ -92,7 +92,8 @@ trait ScalaSettings extends AbsScalaSettings
 
   // Experimental Extensions
   val Xexperimental = BooleanSetting    ("-Xexperimental", "Enable experimental extensions.") .
-                          withPostSetHook(set => List(YdepMethTpes, YmethodInfer, overrideObjects) foreach (_.value = set.value)) //YvirtClasses, 
+                          withPostSetHook(set => List(YmethodInfer, overrideObjects) foreach (_.value = set.value))
+                                                   // YdepMethTpes, YvirtClasses,
 
   /** Compatibility stubs for options whose value name did
    *  not previously match the option name.
@@ -158,6 +159,7 @@ trait ScalaSettings extends AbsScalaSettings
   val Ytyperdebug   = BooleanSetting    ("-Ytyper-debug", "Trace all type assignments.")
   val Yinferdebug   = BooleanSetting    ("-Yinfer-debug", "Trace type inference and implicit search.")
   val Ypmatdebug    = BooleanSetting    ("-Ypmat-debug", "Trace all pattern matcher activity.")
+  val Yreifydebug    = BooleanSetting   ("-Yreify-debug", "Trace reification actions.")
   val Yreplsync     = BooleanSetting    ("-Yrepl-sync", "Do not use asynchronous code for repl startup")
   val Yrepldebug    = BooleanSetting    ("-Yrepl-debug", "Trace all repl activity.") .
                                           withPostSetHook(_ => interpreter.replProps.debug setValue true)
@@ -165,12 +167,15 @@ trait ScalaSettings extends AbsScalaSettings
   val Ydocdebug     = BooleanSetting    ("-Ydoc-debug", "Trace all scaladoc activity.")
   val Ypmatnaive    = BooleanSetting    ("-Ypmat-naive", "Desugar matches as naively as possible.")
   val Ynotnull      = BooleanSetting    ("-Ynotnull", "Enable (experimental and incomplete) scala.NotNull.")
-  val YdepMethTpes  = BooleanSetting    ("-Ydependent-method-types", "Allow dependent method types.")
+  // val YdepMethTpes  = BooleanSetting    ("-Ydependent-method-types", "Allow dependent method types.")
   val YmethodInfer  = BooleanSetting    ("-Yinfer-argument-types", "Infer types for arguments of overriden methods.")
+  val etaExpandKeepsStar = BooleanSetting("-Yeta-expand-keeps-star", "Eta-expand varargs methods to T* rather than Seq[T].  This is a temporary option to ease transition.")
   val noSelfCheck   = BooleanSetting    ("-Yno-self-type-checks", "Suppress check for self-type conformance among inherited members.")
+  val YvirtPatmat   = BooleanSetting    ("-Yvirtpatmat", "Translate pattern matches into flatMap/orElse calls. See scala.MatchingStrategy.")
   val YvirtClasses  = false // too embryonic to even expose as a -Y //BooleanSetting    ("-Yvirtual-classes", "Support virtual classes")
 
   val exposeEmptyPackage = BooleanSetting("-Yexpose-empty-package", "Internal only: expose the empty package.").internalOnly()
+  val YnoProductN = BooleanSetting ("-Yno-productN", "Do not add ProductN to case classes")
   
   def stop = stopAfter
 

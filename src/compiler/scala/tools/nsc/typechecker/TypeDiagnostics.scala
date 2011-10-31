@@ -56,7 +56,7 @@ trait TypeDiagnostics {
     unit.warning(pos, "Implementation restriction: " + msg)
   def restrictionError(pos: Position, unit: CompilationUnit, msg: String): Unit =
     unit.error(pos, "Implementation restriction: " + msg)
-  
+
   /** A map of Positions to addendums - if an error involves a position in
    *  the map, the addendum should also be printed.
    */
@@ -81,6 +81,17 @@ trait TypeDiagnostics {
    */
   def posPrecedes(p1: Position, p2: Position) = p1.isDefined && p2.isDefined && p1.line < p2.line
   def linePrecedes(t1: Tree, t2: Tree) = posPrecedes(t1.pos, t2.pos)
+  
+  private object DealiasedType extends TypeMap {
+    def apply(tp: Type): Type = tp match {
+      // Avoid "explaining" that String is really java.lang.String,
+      // while still dealiasing types from non-default namespaces.
+      case TypeRef(pre, sym, args) if sym.isAliasType && !sym.isInDefaultNamespace =>
+        mapOver(tp.dealias)
+      case _ =>
+        mapOver(tp)
+    }
+  }
   
   def notAMemberMessage(pos: Position, qual: Tree, name: Name) = {
     val owner            = qual.tpe.typeSymbol
@@ -112,6 +123,13 @@ trait TypeDiagnostics {
       else nameString + " is not a member of " + targetKindString + target + addendum
     )
   }
+
+  /** An explanatory note to be added to error messages
+   *  when there's a problem with abstract var defs */
+  def abstractVarMessage(sym: Symbol): String =
+    if (underlyingSymbol(sym).isVariable)
+      "\n(Note that variables need to be initialized to be defined)"
+    else ""
   
   /** Only prints the parameter names if they're not synthetic,
    *  since "x$1: Int" does not offer any more information than "Int".
@@ -133,6 +151,24 @@ trait TypeDiagnostics {
   def alternativesString(tree: Tree) =
     alternatives(tree) map (x => "  " + methodTypeErrorString(x)) mkString ("", " <and>\n", "\n")
   
+  /** The symbol which the given accessor represents (possibly in part).
+   *  This is used for error messages, where we want to speak in terms
+   *  of the actual declaration or definition, not in terms of the generated setters
+   *  and getters.
+   */
+  def underlyingSymbol(member: Symbol): Symbol =
+    if (!member.hasAccessorFlag) member
+    else if (!member.isDeferred) member.accessed
+    else {
+      val getter = if (member.isSetter) member.getter(member.owner) else member
+      val flags  = if (getter.setter(member.owner) != NoSymbol) DEFERRED | MUTABLE else DEFERRED
+
+      ( getter.owner.newValue(getter.pos, getter.name.toTermName)
+          setInfo getter.tpe.resultType
+          setFlag flags
+      )
+    }
+
   def treeSymTypeMsg(tree: Tree): String = {
     val sym               = tree.symbol
     def hasParams         = tree.tpe.paramSectionCount > 0    
@@ -167,12 +203,17 @@ trait TypeDiagnostics {
     else if (sym.variance == -1) "contravariant"
     else "invariant"
 
-  // I think this should definitely be on by default, but I need to
-  // play with it a bit longer.  For now it's behind -Xlint.
-  def explainAlias(tp: Type) = (
-    if (!settings.lint.value || (tp eq tp.normalize)) ""
-    else "    (which expands to)\n             " + tp.normalize
-  )
+  def explainAlias(tp: Type) = {
+    // Don't automatically normalize standard aliases; they still will be
+    // expanded if necessary to disambiguate simple identifiers.
+    if ((tp eq tp.normalize) || tp.typeSymbolDirect.isInDefaultNamespace) ""
+    else {
+      // A sanity check against expansion being identical to original.
+      val s = "" + DealiasedType(tp)
+      if (s == "" + tp) ""
+      else "\n    (which expands to)  " + s
+    }
+  }
   
   /** Look through the base types of the found type for any which
    *  might have been valid subtypes if given conformant type arguments.
@@ -247,7 +288,6 @@ trait TypeDiagnostics {
     }
     ""    // no elaborable variance situation found
   }
-  
   def foundReqMsg(found: Type, req: Type): String = (
     withDisambiguation(Nil, found, req)(
       ";\n found   : " + found.toLongString + existentialContext(found) + explainAlias(found) +
@@ -264,8 +304,11 @@ trait TypeDiagnostics {
     def modifyName(f: String => String) =
       sym.name = newTypeName(f(sym.name.toString))
 
-    def scalaQualify() = {
-      val intersect = Set(trueOwner, aliasOwner) intersect Set(ScalaPackageClass, PredefModuleClass)
+    /** Prepend java.lang, scala., or Predef. if this type originated
+     *  in one of those.
+     */
+    def qualifyDefaultNamespaces() = {
+      val intersect = Set(trueOwner, aliasOwner) intersect UnqualifiedOwners
       if (intersect.nonEmpty) preQualify()
     }
 
@@ -275,8 +318,8 @@ trait TypeDiagnostics {
     def typeQualify()  = if (sym.isTypeParameterOrSkolem) postQualify()
     def nameQualify()  = if (trueOwner.isPackageClass) preQualify() else postQualify()
 
-    def trueOwner  = tp.typeSymbol.owner.skipPackageObject
-    def aliasOwner = tp.typeSymbolDirect.owner.skipPackageObject
+    def trueOwner  = tp.typeSymbol.effectiveOwner
+    def aliasOwner = tp.typeSymbolDirect.effectiveOwner
     
     def sym_==(other: TypeDiag)     = tp.typeSymbol == other.tp.typeSymbol
     def owner_==(other: TypeDiag)   = trueOwner == other.trueOwner
@@ -340,7 +383,7 @@ trait TypeDiagnostics {
         // scala package or predef, qualify with scala so it is not confusing why
         // e.g. java.util.Iterator and Iterator are different types.
         if (td1 name_== td2)
-          tds foreach (_.scalaQualify())
+          tds foreach (_.qualifyDefaultNamespaces())
 
         // If they still print identically:
         //   a) If they are type parameters with different owners, append (in <owner>)
@@ -360,10 +403,14 @@ trait TypeDiagnostics {
   trait TyperDiagnostics {
     self: Typer =>
 
-    private def contextError(pos: Position, msg: String) { contextError(context, pos, msg) }
-    private def contextError(context0: Analyzer#Context, pos: Position, msg: String) { context0.error(pos, msg) }
-    private def contextError(pos: Position, err: Throwable) { contextError(context, pos, err) }
-    private def contextError(context0: Analyzer#Context, pos: Position, err: Throwable) { context0.error(pos, err) }
+    private def contextError(pos: Position, msg: String) = contextError(context, pos, msg)
+    private def contextError(context0: Analyzer#Context, pos: Position, msg: String) = context0.error(pos, msg)
+    private def contextError(pos: Position, err: Throwable) = contextError(context, pos, err)
+    private def contextError(context0: Analyzer#Context, pos: Position, err: Throwable) = context0.error(pos, err)
+    private def contextWarning(pos: Position, msg: String) = context.unit.warning(pos, msg)
+
+    def permanentlyHiddenWarning(pos: Position, hidden: Name, defn: Symbol) =
+      contextWarning(pos, "imported `%s' is permanently hidden by definition of %s".format(hidden, defn.fullLocationString))
     
     object checkDead {
       private var expr: Symbol = NoSymbol

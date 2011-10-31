@@ -9,7 +9,7 @@
 package scala.tools.nsc
 package ast.parser
 
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{ListBuffer, StringBuilder}
 import util.{ SourceFile, OffsetPosition, FreshNameCreator }
 import scala.reflect.internal.{ ModifierFlags => Flags }
 import Tokens._
@@ -118,7 +118,7 @@ trait ParsersCommon extends ScannersCommon {
  *    </li>
  *  </ol>
  */
-trait Parsers extends Scanners /*@XML*/ with MarkupParsers /*XML@*/ with ParsersCommon {
+trait Parsers extends Scanners with MarkupParsers with ParsersCommon {
 self =>
   val global: Global 
   import global._
@@ -158,7 +158,6 @@ self =>
     def incompleteInputError(msg: String): Unit = throw new MalformedInput(source.content.length - 1, msg)
 
     /** the markup parser */
-/*@XML*/
     lazy val xmlp = new MarkupParser(this, true)
 
     object symbXMLBuilder extends SymbolicXMLBuilder(this, true) { // DEBUG choices
@@ -168,7 +167,6 @@ self =>
 
     def xmlLiteral : Tree = xmlp.xLiteral
     def xmlLiteralPattern : Tree = xmlp.xLiteralPattern
-/*XML@*/
   }
 
   class OutlineParser(source: SourceFile) extends SourceFileParser(source) {
@@ -177,16 +175,12 @@ self =>
       accept(LBRACE)  
       var openBraces = 1
       while (in.token != EOF && openBraces > 0) {
-        /*@XML*/
         if (in.token == XMLSTART) xmlLiteral()
         else {
-        /*XML@*/
           if (in.token == LBRACE) openBraces += 1
           else if (in.token == RBRACE) openBraces -= 1
           in.nextToken()
-        /*@XML*/
         }
-        /*XML@*/
       }
       body
     }
@@ -622,15 +616,15 @@ self =>
 
     def isLiteralToken(token: Int) = token match {
       case CHARLIT | INTLIT | LONGLIT | FLOATLIT | DOUBLELIT |
-           STRINGLIT | SYMBOLLIT | TRUE | FALSE | NULL          => true
-      case _                                                    => false
+           STRINGLIT | STRINGPART | SYMBOLLIT | TRUE | FALSE | NULL => true
+      case _                                                        => false
     }
     def isLiteral = isLiteralToken(in.token)
 
     def isExprIntroToken(token: Int): Boolean = isLiteralToken(token) || (token match {
       case IDENTIFIER | BACKQUOTED_IDENT |
            THIS | SUPER | IF | FOR | NEW | USCORE | TRY | WHILE |
-           DO | RETURN | THROW | LPAREN | LBRACE /*@XML*/| XMLSTART /*XML@*/ => true
+           DO | RETURN | THROW | LPAREN | LBRACE | XMLSTART => true
       case _ => false
     })
 
@@ -905,7 +899,7 @@ self =>
       }
       def simpleTypeRest(t: Tree): Tree = in.token match {
         case HASH     => simpleTypeRest(typeProjection(t))
-        case LBRACKET => simpleTypeRest(atPos(t.pos.startOrPoint)(AppliedTypeTree(t, typeArgs())))
+        case LBRACKET => simpleTypeRest(atPos(t.pos.startOrPoint, t.pos.point)(AppliedTypeTree(t, typeArgs())))
         case _        => t
       }
       
@@ -1115,6 +1109,8 @@ self =>
       }
       if (in.token == SYMBOLLIT)
         Apply(scalaDot(nme.Symbol), List(finish(in.strVal)))
+      else if (in.token == STRINGPART)
+        interpolatedString()
       else finish(in.token match {
         case CHARLIT               => in.charVal
         case INTLIT                => in.intVal(isNegated).toInt
@@ -1129,6 +1125,27 @@ self =>
           syntaxErrorOrIncomplete("illegal literal", true)
           null
       })
+    }
+    
+    private def stringOp(t: Tree, op: TermName) = {
+      val str = in.strVal
+      in.nextToken()
+      if (str.length == 0) t
+      else atPos(t.pos.startOrPoint) {
+        Apply(Select(t, op), List(Literal(Constant(str))))
+      }
+    }
+    
+    private def interpolatedString(): Tree = {
+      var t = atPos(o2p(in.offset))(New(TypeTree(definitions.StringBuilderClass.tpe), List(List())))
+      while (in.token == STRINGPART) {
+        t = stringOp(t, nme.append)
+        var e = expr()
+        if (in.token == STRINGFMT) e = stringOp(e, nme.formatted)
+        t = atPos(t.pos.startOrPoint)(Apply(Select(t, nme.append), List(e)))
+      }
+      if (in.token == STRINGLIT) t = stringOp(t, nme.append)
+      atPos(t.pos)(Select(t, nme.toString_))
     }
 
 /* ------------- NEW LINES ------------------------------------------------- */
@@ -1455,9 +1472,7 @@ self =>
       }
       else simpleExpr()
     }
-    /*@XML*/
     def xmlLiteral(): Tree
-    /*XML@*/
     
     /** {{{
      *  SimpleExpr    ::= new (ClassTemplate | TemplateBody)
@@ -1477,10 +1492,8 @@ self =>
       val t =
         if (isLiteral) atPos(in.offset)(literal(false))
         else in.token match {
-          /*@XML*/
           case XMLSTART =>
             xmlLiteral()
-          /*XML@*/
           case IDENTIFIER | BACKQUOTED_IDENT | THIS | SUPER =>
             path(true, false)
           case USCORE =>
@@ -1822,14 +1835,12 @@ self =>
             in.nextToken()
             atPos(start, start) { Ident(nme.WILDCARD) }
           case CHARLIT | INTLIT | LONGLIT | FLOATLIT | DOUBLELIT |
-               STRINGLIT | SYMBOLLIT | TRUE | FALSE | NULL =>
+               STRINGLIT | STRINGPART | SYMBOLLIT | TRUE | FALSE | NULL =>
             atPos(start) { literal(false) }
           case LPAREN =>
             atPos(start)(makeParens(noSeq.patterns()))
-          /*@XML*/
           case XMLSTART =>
             xmlLiteralPattern()
-          /*XML@*/
           case _ =>
             syntaxErrorOrIncomplete("illegal start of simple pattern", true)
             errorPatternTree
@@ -1871,9 +1882,7 @@ self =>
       if (in.token == RPAREN) Nil
       else seqPatterns()
     }
-    /*@XML*/
     def xmlLiteralPattern(): Tree
-    /*XML@*/
 
 /* -------- MODIFIERS and ANNOTATIONS ------------------------------------------- */    
 
@@ -2673,17 +2682,19 @@ self =>
      *  }}}
      */
     def templateOpt(mods: Modifiers, name: Name, constrMods: Modifiers, vparamss: List[List[ValDef]], tstart: Int): Template = {
-      /** A synthetic ProductN parent for case classes. */
-      def extraCaseParents = (
-        if (settings.Xexperimental.value && mods.isCase) {
+      /** Extra parents for case classes. */
+      def caseParents() = (
+        if (mods.isCase) {
           val arity = if (vparamss.isEmpty || vparamss.head.isEmpty) 0 else vparamss.head.size
-          if (arity == 0) Nil
-          else List(
-            AppliedTypeTree(
-              productConstrN(arity),
-              vparamss.head map (vd => vd.tpt)
+          productConstr :: serializableConstr :: {
+            if (arity == 0 || settings.YnoProductN.value) Nil
+            else List(
+              AppliedTypeTree(
+                productConstrN(arity),
+                vparamss.head map (vd => vd.tpt.duplicate setPos vd.tpt.pos.focus)
+              )
             )
-          )
+          }
         }
         else Nil
       )
@@ -2710,11 +2721,7 @@ self =>
             if (!isInterface(mods, body) && !isScalaArray(name)) parents0 :+ scalaScalaObjectConstr
             else if (parents0.isEmpty) List(scalaAnyRefConstr)
             else parents0
-          ) ++ (
-            if (mods.isCase) List(productConstr, serializableConstr) ++ extraCaseParents
-            else Nil
-          )
-
+          ) ++ caseParents()
           Template(parents, self, constrMods, vparamss, argss, body, o2p(tstart))
         }
       }

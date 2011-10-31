@@ -7,21 +7,23 @@ package runtime
  */
 class Settings extends internal.settings.MutableSettings {
   
-  class Setting extends SettingValue
+  trait Setting extends SettingValue { }
   
   class BooleanSetting(x: Boolean) extends Setting {
     type T = Boolean
-    v = x
+    protected var v: Boolean = x
+    override def value: Boolean = v
   }
   
   class IntSetting(x: Int) extends Setting {
     type T = Int
-    v = x
+    protected var v: Int = x
+    override def value: Int = v
   }
 
   val overrideObjects = new BooleanSetting(false)
   val debug = new BooleanSetting(false)
-  val YdepMethTpes = new BooleanSetting(false)
+  // val YdepMethTpes = new BooleanSetting(true)
   val Ynotnull = new BooleanSetting(false)
   val explaintypes = new BooleanSetting(false)
   val verbose = new BooleanSetting(false)
@@ -30,4 +32,5 @@ class Settings extends internal.settings.MutableSettings {
   val printtypes = new BooleanSetting(false)
   val Yrecursion = new IntSetting(0)
   val maxClassfileName = new IntSetting(255)
+  val Xexperimental = new BooleanSetting(false)
 }
