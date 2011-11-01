@@ -434,35 +434,25 @@ trait ErrorTrees {
 
       // doTypeApply
       //tryNamesDefaults
-      def WrongNumberOfArgsError(tree: Tree, fun: Tree) = {
-        issueNormalTypeError(tree, "wrong number of arguments for "+ treeSymTypeMsg(fun))
-        setError(tree)
-      }
+      def WrongNumberOfArgsError(tree: Tree, fun: Tree) =
+        NormalTypeError(tree, "wrong number of arguments for "+ treeSymTypeMsg(fun))
 
-      def TooManyArgsNamesDefaultsError(tree: Tree, fun: Tree) = {
-        issueNormalTypeError(tree, "too many arguments for "+treeSymTypeMsg(fun))
-        setError(tree)
-      }
+      def TooManyArgsNamesDefaultsError(tree: Tree, fun: Tree) =
+        NormalTypeError(tree, "too many arguments for "+treeSymTypeMsg(fun))
       
       // can it still happen? see test case neg/t960.scala
       // TODO no test case
-      def OverloadedUnapplyError(tree: Tree) = {
+      def OverloadedUnapplyError(tree: Tree) =
         issueNormalTypeError(tree, "cannot resolve overloaded unapply")
-      }
       
-      def UnapplyWithSingleArgError(tree: Tree) = {
+      def UnapplyWithSingleArgError(tree: Tree) =
         issueNormalTypeError(tree, "an unapply method must accept a single argument.")
-      }
 
-      def MultipleVarargError(tree: Tree) = {
-        issueNormalTypeError(tree, "when using named arguments, the vararg parameter has to be specified exactly once")
-        setError(tree)
-      }
+      def MultipleVarargError(tree: Tree) =
+        NormalTypeError(tree, "when using named arguments, the vararg parameter has to be specified exactly once")
 
-      def ModuleUsingCompanionClassDefaultArgsErrror(tree: Tree) = {
-        issueNormalTypeError(tree, "module extending its companion class cannot use default constructor arguments")
-        setError(tree)
-      }
+      def ModuleUsingCompanionClassDefaultArgsErrror(tree: Tree) =
+        NormalTypeError(tree, "module extending its companion class cannot use default constructor arguments")
 
       def NotEnoughArgsError(tree: Tree, fun0: Tree, missing0: List[Symbol]) = {
         def notEnoughArgumentsMsg(fun: Tree, missing: List[Symbol]) = {
@@ -480,26 +470,19 @@ trait ErrorTrees {
   
           "not enough arguments for " + treeSymTypeMsg(fun) + suffix
         }
-        issueNormalTypeError(tree, notEnoughArgumentsMsg(fun0, missing0))
-        setError(tree)
+        NormalTypeError(tree, notEnoughArgumentsMsg(fun0, missing0))
       }
       
       //doTypedApply - patternMode
       // TODO: missing test case
-      def TooManyArgsPatternError(fun: Tree) = {
-        issueNormalTypeError(fun, "too many arguments for unapply pattern, maximum = "+definitions.MaxTupleArity)
-        setError(fun)
-      }
+      def TooManyArgsPatternError(fun: Tree) =
+        NormalTypeError(fun, "too many arguments for unapply pattern, maximum = "+definitions.MaxTupleArity)
 
-      def WrongNumberArgsPatternError(tree: Tree, fun: Tree) = {
-        issueNormalTypeError(tree, "wrong number of arguments for "+treeSymTypeMsg(fun))
-        setError(tree)
-      }
+      def WrongNumberArgsPatternError(tree: Tree, fun: Tree) =
+        NormalTypeError(tree, "wrong number of arguments for "+treeSymTypeMsg(fun))
 
-      def ApplyWithoutArgsError(tree: Tree, fun: Tree) = {
-        issueNormalTypeError(tree, fun.tpe+" does not take parameters")
-        setError(tree)
-      }
+      def ApplyWithoutArgsError(tree: Tree, fun: Tree) =
+        NormalTypeError(tree, fun.tpe+" does not take parameters")
 
       //checkClassType
       def TypeNotAStablePrefixError(tpt: Tree, pre: Type) = {
@@ -597,12 +580,6 @@ trait ErrorTrees {
       //checkStarPatOK
       def StarPatternWithVarargParametersError(tree: Tree) =
         issueNormalTypeError(tree, "star patterns must correspond with varargs parameters")
-
-      def GetterDefinedTwiceError(getter: Symbol) =
-        issueSymbolTypeError(getter, getter+" is defined twice")
-
-      def BeanPropertyAnnotationLimitationError(tree: Tree) =
-        issueNormalTypeError(tree, "implementation limitation: the BeanProperty annotation cannot be used in a type alias or renamed import")
 
       // TODO missing test case
       def FinitaryError(tparam: Symbol) =
@@ -828,6 +805,12 @@ trait ErrorTrees {
             context.issue(TypeErrorWithUnderlying(tree, ex))
         }
       }
+      def GetterDefinedTwiceError(getter: Symbol)(implicit context: Context) =
+        issueSymbolTypeError(getter, getter+" is defined twice")
+        
+      def BeanPropertyAnnotationLimitationError(tree: Tree)(implicit context: Context) =
+        issueNormalTypeError(tree, "implementation limitation: the BeanProperty annotation cannot be used in a type alias or renamed import")
+
     }
   }
   
