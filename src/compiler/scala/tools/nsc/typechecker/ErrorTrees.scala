@@ -797,20 +797,121 @@ trait ErrorTrees {
     self: Namer =>
     
     object NamerErrorGen {
-      def TypeSigError(tree: Tree, ex: TypeError)(implicit context: Context) = {
+      
+      implicit val context0 = context 
+      def TypeSigError(tree: Tree, ex: TypeError) = {
         ex match {
           case CyclicReference(sym, info: TypeCompleter) =>
             issueNormalTypeError(tree, typer.cyclicReferenceMessage(sym, info.tree) getOrElse ex.getMessage())
           case _ =>
-            context.issue(TypeErrorWithUnderlying(tree, ex))
+            context0.issue(TypeErrorWithUnderlying(tree, ex))
         }
       }
-      def GetterDefinedTwiceError(getter: Symbol)(implicit context: Context) =
+      def GetterDefinedTwiceError(getter: Symbol) =
         issueSymbolTypeError(getter, getter+" is defined twice")
         
-      def BeanPropertyAnnotationLimitationError(tree: Tree)(implicit context: Context) =
+      def ValOrValWithSetterSuffixError(tree: Tree) =
+        issueNormalTypeError(tree, "Names of vals or vars may not end in `_='")
+        
+      def PrivateThisCaseClassParameterError(tree: Tree) = 
+        issueNormalTypeError(tree, "private[this] not allowed for case class parameters")
+        
+      def BeanPropertyAnnotationLimitationError(tree: Tree) =
         issueNormalTypeError(tree, "implementation limitation: the BeanProperty annotation cannot be used in a type alias or renamed import")
+              
+      def BeanPropertyAnnotationFieldWithoutLetterError(tree: Tree) =
+        issueNormalTypeError(tree, "`BeanProperty' annotation can be applied only to fields that start with a letter")
 
+      def BeanPropertyAnnotationPrivateFieldError(tree: Tree) =
+        issueNormalTypeError(tree, "`BeanProperty' annotation can be applied only to non-private fields")
+
+      def DoubleDefError(currentSym: Symbol, prevSym: Symbol) = {
+        val s1 = if (prevSym.isModule) "case class companion " else ""
+        val s2 = if (prevSym.isSynthetic) "(compiler-generated) " + s1 else ""
+        val s3 = if (prevSym.isCase) "case class " + prevSym.name else "" + prevSym
+
+        issueSymbolTypeError(currentSym, prevSym.name + " is already defined as " + s2 + s3)
+      }
+      
+      def MaxParametersCaseClassError(tree: Tree) =
+        issueNormalTypeError(tree, "Implementation restriction: case classes cannot have more than " + definitions.MaxFunctionArity + " parameters.")
+        
+      def InheritsItselfError(tree: Tree) =
+        issueNormalTypeError(tree, tree.tpe.typeSymbol+" inherits itself")
+        
+      def MissingParameterOrValTypeError(vparam: Tree) = 
+        issueNormalTypeError(vparam, "missing parameter type")
+        
+      def RootImportError(tree: Tree) =
+        issueNormalTypeError(tree, "_root_ cannot be imported")
+      
+      object SymValidateErrors extends Enumeration {
+        val ImplicitConstr, ImplicitNotTerm, ImplicitTopObject,
+          OverrideClass, SealedNonClass, AbstractNonClass,
+          OverrideConstr, AbstractOverride, LazyAndEarlyInit,
+          ByNameParameter, AbstractVar = Value
+      }  
+      
+      import SymValidateErrors._
+      // TODO move error generation here somehow?
+      def SymbolValidationError(sym: Symbol, errKind: SymValidateErrors.Value) {
+        val msg = errKind match {
+          case ImplicitConstr =>
+            "`implicit' modifier not allowed for constructors"
+          case ImplicitNotTerm =>
+            "`implicit' modifier can be used only for values, variables and methods"
+          case ImplicitTopObject =>
+            "`implicit' modifier cannot be used for top-level objects"
+          case OverrideClass =>
+            "`override' modifier not allowed for classes"
+          case SealedNonClass =>
+            "`sealed' modifier can be used only for classes"
+          case AbstractNonClass =>
+            "`abstract' modifier can be used only for classes; it should be omitted for abstract members"
+          case OverrideConstr =>
+            "`override' modifier not allowed for constructors"
+          case AbstractOverride =>
+            "`abstract override' modifier only allowed for members of traits"
+          case LazyAndEarlyInit =>
+            "`lazy' definitions may not be initialized early"
+          case ByNameParameter =>
+            "pass-by-name arguments not allowed for case class parameters"
+          case AbstractVar =>
+            "only classes can have declared but undefined members" + abstractVarMessage(sym)
+        }
+        issueSymbolTypeError(sym, msg)
+      }
+      
+      import symtab.Flags
+      
+      def AbstractMemberWithModiferError(sym: Symbol, flag: Int) =
+        issueSymbolTypeError(sym, "abstract member may not have " + Flags.flagsToString(flag) + " modifier")
+        
+      def IllegalModifierCombination(sym: Symbol, flag1: Int, flag2: Int) =
+        issueSymbolTypeError(sym, "illegal combination of modifiers: %s and %s for: %s".format(
+            Flags.flagsToString(flag1), Flags.flagsToString(flag2), sym))
+
+      def IllegalDependentMethTpeError(sym: Symbol)(context: Context) = {
+        val errorAddendum =
+          ": parameter appears in the type of another parameter in the same section or an earlier one"
+        issueSymbolTypeError(sym,  "illegal dependent method type" + errorAddendum)(context) 
+      }
+      
+      object DuplicatesErrorKinds extends Enumeration {
+        val RenamedTwice, AppearsTwice = Value
+      }
+      
+      import DuplicatesErrorKinds._
+      def DuplicatesError(tree: Tree, name: Name, kind: DuplicatesErrorKinds.Value) = {
+        val msg = kind match {
+          case RenamedTwice =>
+            "is renamed twice"
+          case AppearsTwice =>
+            "appears twice as a target of a renaming"
+        }
+        
+        issueNormalTypeError(tree, name.decode + " " + msg)
+      }
     }
   }
   
