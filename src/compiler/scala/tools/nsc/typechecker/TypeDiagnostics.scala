@@ -403,9 +403,9 @@ trait TypeDiagnostics {
   trait TyperDiagnostics {
     self: Typer =>
 
-    private def contextError(pos: Position, msg: String) = contextError(context, pos, msg)
+    private def contextError(pos: Position, msg: String): Unit = contextError(context, pos, msg)
     private def contextError(context0: Analyzer#Context, pos: Position, msg: String) = context0.error(pos, msg)
-    private def contextError(pos: Position, err: Throwable) = contextError(context, pos, err)
+    private def contextError(pos: Position, err: Throwable): Unit = contextError(context, pos, err)
     private def contextError(context0: Analyzer#Context, pos: Position, err: Throwable) = context0.error(pos, err)
     private def contextWarning(pos: Position, msg: String) = context.unit.warning(pos, msg)
 

@@ -1410,10 +1410,10 @@ trait Types extends api.Types { self: SymbolTable =>
     // override def isNullable: Boolean =
     // parents forall (p => p.isNullable && !p.typeSymbol.isAbstractType);
 
-    override def safeToString: String =
+    override def safeToString: String = {
       parents.mkString(" with ") +
       (if (settings.debug.value || parents.isEmpty || (decls.elems ne null))
-        decls.mkString("{", "; ", "}") else "")
+        decls.mkString("{", "; ", "}") else "") }
   }
 
   /** A class representing intersection types with refinements of the form
@@ -1999,11 +1999,11 @@ A type's typeSymbol should never be inspected directly.
       else pre.prefixString
     )
     private def argsString = if (args.isEmpty) "" else args.mkString("[", ",", "]")
-    private def refinementString = (
+    def refinementString = (
       if (sym.isStructuralRefinement) (
         decls filter (sym => sym.isPossibleInRefinement && sym.isPublic)
           map (_.defString)
-          mkString(" {", "; ", "}")
+          mkString("{", "; ", "}")
       )
       else ""
     )

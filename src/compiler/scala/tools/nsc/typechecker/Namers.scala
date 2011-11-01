@@ -111,7 +111,7 @@ trait Namers extends MethodSynthesis {
     private def owner       = context.owner
     private def contextFile = context.unit.source.file
     private def isInJava    = context.unit.isJava
-    private def typeErrorHandler[T](pos: Position, alt: T): PartialFunction[Throwable, T] = {
+    private def typeErrorHandler[T](tree: Tree, alt: T): PartialFunction[Throwable, T] = {
       case ex: TypeError =>
 //        typer.reportTypeError(pos, ex)
         // TODO: once Context errors are implemented we should be able
@@ -261,7 +261,7 @@ trait Namers extends MethodSynthesis {
         returnContext
       }
       tree.symbol match {
-        case NoSymbol => try dispatch() catch typeErrorHandler(tree.pos, this.context)
+        case NoSymbol => try dispatch() catch typeErrorHandler(tree, this.context)
         case sym      => enterExistingSym(sym)
       }
     }
@@ -1335,7 +1335,7 @@ trait Namers extends MethodSynthesis {
 
       val result =
         try getSig
-        catch typeErrorHandler(tree.pos, ErrorType)
+        catch typeErrorHandler(tree, ErrorType)
 
       result match {
         case PolyType(tparams @ (tp :: _), _) if tp.owner.isTerm => typer.deskolemizeTypeParams(tparams)(result)

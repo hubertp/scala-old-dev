@@ -203,10 +203,10 @@ trait ErrorTrees {
         issueNormalTypeError(tree, "lower bound "+lowB+" does not conform to upper bound "+highB)
 
       // check privates
-      def HiddenSymbolWithError(tree: Tree) = 
+      def HiddenSymbolWithError[T <: Tree](tree: T): T = 
         setError(tree)
 
-      def SymbolEscapesScopeError(tree: Tree, badSymbol: Symbol) = {
+      def SymbolEscapesScopeError[T <: Tree](tree: T, badSymbol: Symbol): T = {
         val modifierString = if (badSymbol.isPrivate) "private " else ""
         issueNormalTypeError(tree, modifierString + badSymbol + " escapes its defining scope as part of type "+tree.tpe)
         setError(tree)
@@ -445,6 +445,7 @@ trait ErrorTrees {
       }
       
       // can it still happen? see test case neg/t960.scala
+      // TODO no test case
       def OverloadedUnapplyError(tree: Tree) = {
         issueNormalTypeError(tree, "cannot resolve overloaded unapply")
       }
@@ -525,7 +526,7 @@ trait ErrorTrees {
         NormalTypeError(parent, "illegal inheritance from final "+mixin)
 
       def ParentSealedInheritanceError(parent: Tree, psym: Symbol) =
-        NormalTypeError(parent, "illegal inheritance from sealed "+psym+": " + context.unit.source.file + " != " + psym.sourceFile)
+        NormalTypeError(parent, "illegal inheritance from sealed " + psym + ": " + context.unit.source.file.canonicalPath + " != " + psym.sourceFile.canonicalPath)
 
       def ParentSelfTypeConformanceError(parent: Tree, selfType: Type) =
         NormalTypeError(parent, 
@@ -839,8 +840,8 @@ trait ErrorTrees {
                                (isView: Boolean, pt: Type, tree: Tree)(implicit context0: Context) = {
       if (!info1.tpe.isErroneous && !info2.tpe.isErroneous) {
         val coreMsg = 
-          pre1+" "+info1.sym+info1.sym.fullLocationString+" of type "+info1.tpe+"\n "+
-          pre2+" "+info2.sym+info2.sym.fullLocationString+" of type "+info2.tpe+"\n "+
+          pre1+" "+info1.sym.fullLocationString+" of type "+info1.tpe+"\n "+
+          pre2+" "+info2.sym.fullLocationString+" of type "+info2.tpe+"\n "+
           trailer
         val errMsg = 
           if (isView) {

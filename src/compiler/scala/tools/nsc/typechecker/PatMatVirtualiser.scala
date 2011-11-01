@@ -410,7 +410,7 @@ trait PatMatVirtualiser extends ast.TreeDSL { self: Analyzer =>
               val extractorCall = try {
                 context.undetparams = Nil
                 silent(_.typed(Apply(genSelect(orig, extractor), List(Ident(nme.SELECTOR_DUMMY) setType fun.tpe.finalResultType)), EXPRmode, WildcardType), reportAmbiguousErrors = false) match {
-                  case extractorCall: Tree => extractorCall // if !extractorCall.containsError() 
+                  case Right(extractorCall) => extractorCall 
                   case _ =>
                     // this fails to resolve overloading properly...
                     // Apply(typedOperator(genSelect(orig, extractor)), List(Ident(nme.SELECTOR_DUMMY))) // no need to set the type of the dummy arg, it will be replaced anyway
