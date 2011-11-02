@@ -189,7 +189,7 @@ trait Infer {
   private val stdErrorValue = stdErrorClass.newErrorValue(nme.ERROR)
 
   /** The context-dependent inferencer part */
-  class Inferencer(context: Context) extends InferencerErrorTrees {
+  class Inferencer(context: Context) extends InferencerContextErrors {
     import InferErrorGen._
     
     /* -- Error Messages --------------------------------------------------- */
@@ -209,10 +209,6 @@ trait Infer {
 
     def issue(err: AbsTypeError) {
       context.issue(err)
-    }
-    
-    def error(pos: Position, msg: String) {
-      context.error(pos, msg)
     }
 
     // TODO: move to more appropriate place?

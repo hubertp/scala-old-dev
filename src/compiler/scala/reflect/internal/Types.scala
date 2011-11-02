@@ -1328,7 +1328,7 @@ trait Types extends api.Types { self: SymbolTable =>
         //Console.println("baseTypeSeq(" + typeSymbol + ") = " + baseTypeSeqCache.toList);//DEBUG
       }
       if (baseTypeSeqCache eq undetBaseTypeSeq)
-        throw new TypeError("illegal cyclic inheritance involving " + typeSymbol)
+        throw new RecoverableCyclicReference(typeSymbol)
       baseTypeSeqCache
     }
 
@@ -1370,7 +1370,7 @@ trait Types extends api.Types { self: SymbolTable =>
         }
       }
       if (baseClassesCache eq null)
-        throw new TypeError("illegal cyclic reference involving " + typeSymbol)
+        throw new RecoverableCyclicReference(typeSymbol)
       baseClassesCache
     }
 
@@ -1776,7 +1776,7 @@ trait Types extends api.Types { self: SymbolTable =>
             // If a subtyping cycle is not detected here, we'll likely enter an infinite
             // loop before a sensible error can be issued.  SI-5093 is one example.
             case x: SubType if x.supertype eq this =>
-              throw new TypeError("illegal cyclic reference involving " + sym)
+              throw new RecoverableCyclicReference(sym)
             case tp => tp
           }
         }
@@ -1984,7 +1984,7 @@ A type's typeSymbol should never be inspected directly.
         }
       }
       if (baseTypeSeqCache == undetBaseTypeSeq)
-        throw new TypeError("illegal cyclic inheritance involving " + sym)
+        throw new RecoverableCyclicReference(sym)
       baseTypeSeqCache
     }
 
@@ -2889,9 +2889,8 @@ A type's typeSymbol should never be inspected directly.
     // we require that object is initialized, thus info.typeParams instead of typeParams.
     if (sym1.isAliasType && sameLength(sym1.info.typeParams, args)) {
       if (sym1.lockOK) TypeRef(pre, sym1, args) // don't expand type alias (cycles checked by lockOK)
-      else throw new TypeError("illegal cyclic reference involving " + sym1)
-    }
-    else {
+      else throw new RecoverableCyclicReference(sym1)
+    } else {
       val pre1 = removeSuper(pre, sym1)
       if (pre1 ne pre)
         typeRef(pre1, rebindTR(pre1, sym1), args)
@@ -2916,7 +2915,7 @@ A type's typeSymbol should never be inspected directly.
         // we require that object is initialized, thus info.typeParams instead of typeParams.
         if (sym1.isAliasType && sameLength(sym1.info.typeParams, args)) {
           if (sym1.lockOK) TypeRef(pre, sym1, args) // don't expand type alias (cycles checked by lockOK)
-          else throw new TypeError("illegal cyclic reference involving " + sym1)
+          else throw new RecoverableCyclicReference(sym1)
         }
         else {
           TypeRef(pre, sym1, args)
@@ -3748,7 +3747,7 @@ A type's typeSymbol should never be inspected directly.
                       if (symclazz.tpe.parents.exists(_.isErroneous))
                         ErrorType // don't be to overzealous with throwing exceptions, see #2641
                       else
-                        throw new TypeError(
+                        throw new Error(
                           "something is wrong (wrong class file?): "+basesym+ 
                           " with type parameters "+
                           basesym.typeParams.map(_.name).mkString("[",",","]")+
@@ -6132,6 +6131,11 @@ A type's typeSymbol should never be inspected directly.
   class TypeError(var pos: Position, val msg: String) extends Throwable(msg) {
     def this(msg: String) = this(NoPosition, msg)
   }
+  
+  //TODO: it shouldn't extend TypeError but that involves changing quite a lot of code
+  /** An exception for cyclic references from which we can recover */
+  case class RecoverableCyclicReference(sym: Symbol)
+  extends TypeError("illegal cyclic reference involving " + sym)
 
   class NoCommonType(tps: List[Type]) extends Throwable(
     "lub/glb of incompatible types: " + tps.mkString("", " and ", "")) with ControlThrowable

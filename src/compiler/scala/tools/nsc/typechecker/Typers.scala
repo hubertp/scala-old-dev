@@ -79,7 +79,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
 
   private def isPastTyper = phase.id > currentRun.typerPhase.id
 
-  abstract class Typer(context0: Context) extends TyperDiagnostics with Adaptation with TyperErrorTrees {
+  abstract class Typer(context0: Context) extends TyperDiagnostics with Adaptation with TyperContextErrors {
     import context0.unit
     import typeDebug.{ ptTree, ptBlock, ptLine }
     import TyperErrorGen._
@@ -4438,6 +4438,13 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           // because everything will be handled by error trees. 
           // The only problematic case are Cyclic errors which can pop up almost anywhere
           printTyping("caught %s: while typing %s".format(ex, tree)) //DEBUG
+          
+          ex match {
+            case _: CyclicReference =>             
+            case _: RecoverableCyclicReference =>
+            case _ if !isPastTyper =>
+              println("TODO: TypeError cannot be thrown by during typechecking")
+          }
           reportTypeError(tree.pos, ex)
           setError(tree)
         case ex: Exception =>

@@ -230,7 +230,7 @@ trait Implicits {
    *  @param context0         The context used for the implicit search
    */
   class ImplicitSearch(tree: Tree, pt: Type, isView: Boolean, context0: Context) 
-    extends Typer(context0) with ImplicitErrorTrees {
+    extends Typer(context0) with ImplicitContextErrors {
       printTyping(
         ptBlock("new ImplicitSearch",
           "tree"        -> tree,

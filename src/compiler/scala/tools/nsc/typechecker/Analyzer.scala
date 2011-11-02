@@ -22,7 +22,7 @@ trait Analyzer extends AnyRef
             with Unapplies
             with NamesDefaults
             with TypeDiagnostics
-            with ErrorTrees
+            with ContextErrors
 {
   val global : Global
   import global._

@@ -73,7 +73,7 @@ trait Namers extends MethodSynthesis {
     classAndNamerOfModule.clear()
   }
 
-  abstract class Namer(val context: Context) extends MethodSynth with NamerErrorTrees {
+  abstract class Namer(val context: Context) extends MethodSynth with NamerContextErrors {
 
     import NamerErrorGen._
     val typer = newTyper(context)
@@ -1436,15 +1436,14 @@ trait Namers extends MethodSynthesis {
   //    def foo[T, T2](a: T, x: T2)(implicit w: ComputeT2[T, T2])
   // moreover, the latter is not an encoding of the former, which hides type
   // inference of T2, so you can specify T while T2 is purely computed
-  private class DependentTypeChecker(ctx: Context)(errors: NamerErrorTrees) extends TypeTraverser {
-    import errors.NamerErrorGen.IllegalDependentMethTpeError
+  private class DependentTypeChecker(ctx: Context)(errors: NamerContextErrors) extends TypeTraverser {
     private[this] val okParams = mutable.Set[Symbol]()
     private[this] val method   = ctx.owner
 
     def traverse(tp: Type) = tp match {
       case SingleType(_, sym) =>
         if (sym.owner == method && sym.isValueParameter && !okParams(sym))
-          IllegalDependentMethTpeError(sym)(ctx)
+          errors.NamerErrorGen.IllegalDependentMethTpeError(sym)(ctx)
 
       case _ => mapOver(tp)
     }
@@ -1485,8 +1484,7 @@ trait Namers extends MethodSynthesis {
     }
     catch {
       case e: InvalidCompanions =>
-        // TODO
-        ctx.error(original.pos, e.getMessage)
+        ctx.unit.error(original.pos, e.getMessage)
         NoSymbol
     }
   }

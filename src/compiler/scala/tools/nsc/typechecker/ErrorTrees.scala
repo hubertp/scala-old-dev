@@ -15,7 +15,7 @@ import scala.collection.{ mutable, immutable }
 import scala.tools.util.StringOps.{ countElementsAsString, countAsString }
 import symtab.Flags.{ PRIVATE, PROTECTED }
 
-trait ErrorTrees {
+trait ContextErrors {
   self: Analyzer =>
 
   import global._
@@ -80,7 +80,7 @@ trait ErrorTrees {
   
   import ErrorGeneratorUtils._
   
-  trait TyperErrorTrees {
+  trait TyperContextErrors {
     self: Typer =>
     
     import infer.setError
@@ -613,7 +613,7 @@ trait ErrorTrees {
     }
   }
 
-  trait InferencerErrorTrees {
+  trait InferencerContextErrors {
     self: Inferencer =>
 
     private def applyErrorMsg(tree: Tree, msg: String, argtpes: List[Type], pt: Type) = {
@@ -793,7 +793,7 @@ trait ErrorTrees {
     }
   }
 
-  trait NamerErrorTrees {
+  trait NamerContextErrors {
     self: Namer =>
     
     object NamerErrorGen {
@@ -915,7 +915,7 @@ trait ErrorTrees {
     }
   }
   
-  trait ImplicitErrorTrees {
+  trait ImplicitContextErrors {
     self: ImplicitSearch =>
     import definitions._
 
