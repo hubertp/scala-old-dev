@@ -407,6 +407,7 @@ trait Namers extends MethodSynthesis {
       if (m.owner.isPackageClass && !m.isPackage) {
         m.moduleClass.sourceFile = contextFile
         currentRun.symSource(m) = m.moduleClass.sourceFile
+        EV << EV.NewTopLevelModule(m)
         registerTopLevelSym(m)
       }
       m

@@ -1289,6 +1289,7 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid with 
 
           case call @ CALL_METHOD(method, style) =>
             val owner: String = javaName(method.owner)
+            EV << (EV.CallMethod(this.method.symbol, method) withPos call.pos)
             // reference the type of the receiver instead of the method owner (if not an interface!)
             val dynamicOwner =
               if (needsInterfaceCall(call.hostClass)) owner

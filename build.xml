@@ -377,6 +377,7 @@ LOCAL REFERENCE BUILD (LOCKER)
         <include name="**/*.swf"/>
         <include name="**/*.png"/>
         <include name="**/*.gif"/>
+        <include name="**/*.txt"/>
       </fileset>
     </copy>
     <touch file="${build-locker.dir}/compiler.complete" verbose="no"/>

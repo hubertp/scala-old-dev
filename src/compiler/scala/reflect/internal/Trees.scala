@@ -54,17 +54,26 @@ trait Trees extends api.Trees { self: SymbolTable =>
     def & (flag: Long): Modifiers = {
       val flags1 = flags & flag
       if (flags1 == flags) this
-      else Modifiers(flags1, privateWithin, annotations) setPositions positions
+      else {
+        EV << EV.ClearModFlag(this, flags, flags1, flag)
+        Modifiers(flags1, privateWithin, annotations) setPositions positions
+      }
     }
     def &~ (flag: Long): Modifiers = {
       val flags1 = flags & (~flag)
       if (flags1 == flags) this
-      else Modifiers(flags1, privateWithin, annotations) setPositions positions
+      else {
+        EV << EV.ClearModFlag(this, flags, flags1, flag)
+        Modifiers(flags1, privateWithin, annotations) setPositions positions
+      }
     }
     def | (flag: Long): Modifiers = {
       val flags1 = flags | flag
       if (flags1 == flags) this
-      else Modifiers(flags1, privateWithin, annotations) setPositions positions
+      else {
+        EV << EV.SetModFlag(this, flags, flags1, flag)
+        Modifiers(flags1, privateWithin, annotations) setPositions positions
+      }
     }
     def withAnnotations(annots: List[Tree]) =
       if (annots.isEmpty) this
@@ -278,7 +287,7 @@ trait Trees extends api.Trees { self: SymbolTable =>
     }
   }
 
-  private object posAssigner extends Traverser {
+  object posAssigner extends Traverser {
     var pos: Position = _
     override def traverse(t: Tree) {
       if (t != EmptyTree && t.pos == NoPosition) {

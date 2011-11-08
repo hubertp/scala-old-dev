@@ -179,6 +179,9 @@ trait ScalaSettings extends AbsScalaSettings
   
   def stop = stopAfter
 
+  // Warnings
+  val Yhook         = StringSetting     ("-Yhook", "class", "Install named class as event hook", "")
+
   /**
    * IDE-specific settings
    */

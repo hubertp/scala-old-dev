@@ -4423,13 +4423,15 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
 
         tree1.tpe = addAnnotations(tree1, tree1.tpe)
         val result = if (tree1.isEmpty) tree1 else adapt(tree1, mode, pt, tree)
-        
         if (!alreadyTyped) {
           printTyping("adapted %s: %s to %s, %s".format(
             tree1, tree1.tpe.widen, pt, context.undetparamsString)
           ) //DEBUG
         }
-        if (!isPastTyper) signalDone(context.asInstanceOf[analyzer.Context], tree, result)
+        if (!isPastTyper) {
+          signalDone(context.asInstanceOf[analyzer.Context], tree, result)
+          EV << EV.TypedNode(context.asInstanceOf[analyzer.Context], tree, result)
+        }
         result
       } catch {
         case ex: TypeError =>

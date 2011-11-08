@@ -376,7 +376,7 @@ class JLineCompletion(val intp: IMain) extends Completion with CompletionOutput 
        *  because there are some spots which like to throw an assertion
        *  once, then work after that. Yeah, what can I say.
        */
-      try tryAll
+      try EV withNoEvents { tryAll }
       catch { case ex: Throwable =>
         repldbg("Error: complete(%s, %s) provoked".format(buf, cursor) + ex)
         Candidates(cursor,

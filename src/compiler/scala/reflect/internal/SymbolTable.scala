@@ -27,7 +27,10 @@ abstract class SymbolTable extends api.Universe
                               with TypeDebugging
                               with Importers
                               with Required
-{  
+                              with event.EventsUniverse
+                              with event.Events
+{
+  
   def rootLoader: LazyType 
   def log(msg: => AnyRef): Unit
   def abort(msg: String): Nothing = throw new Error(msg)

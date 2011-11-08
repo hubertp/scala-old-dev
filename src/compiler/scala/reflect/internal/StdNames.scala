@@ -9,7 +9,7 @@ package internal
 import scala.collection.immutable
 import NameTransformer.MODULE_SUFFIX_STRING
 
-trait StdNames extends /*reflect.generic.StdNames with*/ NameManglers { self: SymbolTable =>
+trait StdNames extends NameManglers { self: SymbolTable =>
     
   def encode(str: String): TermName = newTermName(NameTransformer.encode(str))
   

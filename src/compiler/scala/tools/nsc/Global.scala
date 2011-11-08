@@ -31,8 +31,10 @@ import backend.{ ScalaPrimitives, Platform, MSILPlatform, JavaPlatform }
 import backend.jvm.GenJVM
 import backend.opt.{ Inliners, InlineExceptionHandlers, ClosureElimination, DeadCodeElimination }
 import backend.icode.analysis._
+import event.HookLoader
 
 class Global(var currentSettings: Settings, var reporter: Reporter) extends SymbolTable
+                                                                      with event.EventsGlobal
                                                                       with CompilationUnits
                                                                       with Plugins
                                                                       with PhaseAssembly
@@ -42,7 +44,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
                                                                       with symtab.Positions {
   
   override def settings = currentSettings
-  
+
   // alternate constructors ------------------------------------------
 
   def this(reporter: Reporter) =
@@ -50,7 +52,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
 
   def this(settings: Settings) =
     this(settings, new ConsoleReporter(settings))
-  
+
   // fulfilling requirements
   // Renamed AbstractFile to AbstractFileType for backward compatibility:
   // it is difficult for sbt to work around the ambiguity errors which result.
@@ -61,6 +63,27 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
   def picklerPhase: Phase = if (currentRun.isDefined) currentRun.picklerPhase else NoPhase
     
   // platform specific elements
+
+  // event hooks ------------------------------------------------------
+  
+  object EV extends {
+    val global: Global.this.type = Global.this
+  } with EventModel {
+    val loader = new {
+      val global: Global.this.type = Global.this
+    } with HookLoader
+    
+    lazy val postInit: Unit = {
+      posOK = true
+      settings.Yhook.value match {
+        case ""   => ()
+        case arg  => 
+          log("Installing user hook: " + settings.Yhook.value)
+          addHook(loader createHookFromString arg)
+      }
+    }
+    isInitialized = true
+  }
 
   type ThisPlatform = Platform[_] { val global: Global.this.type }
   
@@ -874,6 +897,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
     def runIsPast(ph: Phase) = globalPhase.id > ph.id
 
     isDefined = true
+    EV.postInit
 
     // ----------- Units and top-level classes and objects --------
 
@@ -1072,6 +1096,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
         if (opt.printStats)
           statistics.print(phase)
 
+        units foreach (unit => EV << EV.ThisPhaseDone(unit))
         advancePhase
       }
       if (opt.profileAll)
