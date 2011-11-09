@@ -12,7 +12,7 @@ import Flags.flagsToString
 import interpreter.IMain.stripString
 
 trait EventStrings {
-  self: SymbolTable with EventsSymbolTable =>
+  self: SymbolTable with EventsSymbolTable with symtab.Positions =>
   
   trait Strings {
     self: EventModel =>
@@ -66,7 +66,7 @@ trait EventStrings {
       case x: BaseTypeSeq => (x.toList map anyStringInternal).mkString("BTS(", ", ", ")")    
       case x              => anyStringInternal(x.asInstanceOf[AnyRef].getClass)
     }
-    def posString(pos: util.Position): String = {
+    def posString(pos: Position): String = {
       if (pos == NoPosition) ""
       else try { "(at " + pos.source + " line " + pos.line + ")" }
       catch    { case _: UnsupportedOperationException => "" }

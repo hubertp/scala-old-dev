@@ -26,7 +26,7 @@ import mutable.ListBuffer
 import java.util.concurrent.{ LinkedBlockingQueue }
 import scala.reflect.internal.event.{ EventsUniverse, Events }
 
-trait EventsSymbolTable extends EventsUniverse with EventStrings with Processing {
+trait EventsSymbolTable extends EventsUniverse with EventStrings with Processing with symtab.Positions {
   outer: SymbolTable =>
   
   abstract class EventModel extends super.EventModel with Strings with ProcessingUtil {

@@ -9,9 +9,5 @@ abstract class Universe extends Symbols
                            with Trees
                            with Positions
                            with AnnotationInfos
-                           with StandardDefinitions {
-  type Position
-  val NoPosition: Position
-
-}
+                           with StandardDefinitions
     
