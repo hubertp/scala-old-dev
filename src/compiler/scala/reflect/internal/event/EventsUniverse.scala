@@ -4,14 +4,14 @@ package event
 
 import annotation.elidable
 
-trait EventsUniverse {
+trait EventsUniverse extends AnyRef with Events {
   outer: SymbolTable =>
   
-  /*val EV: EventModel {
+  val EV: EventModel {
     val global: outer.type
-  }*/
+  }
   
-  abstract class EventModel {
+  abstract class EventModel extends AllEvents {
     val global: SymbolTable
     var isInitialized = false
     

@@ -2,14 +2,18 @@ package scala.reflect
 package internal
 package event
 
-trait Events extends EventsUniverse {
-  outer: SymbolTable =>
+trait Events {
+  outer: SymbolTable with EventsUniverse =>
   
-  val EV: EventModel {
-    val global: outer.type
+  trait AllEvents extends AnyRef
+                  with BasicEvents {
+    self: EventModel =>
   }
-  
-  abstract class EventModel extends super.EventModel {
+ 
+
+  trait BasicEvents {
+    outer: EventModel =>
+      
     case class SetFlag(sym: Symbol, oldFlags: Long, newFlags: Long, mask: Long) extends SymFlagEvent {
       def tag = "setFlag"
       override def eventString = joinString(sym, "+" + flagsString(mask))

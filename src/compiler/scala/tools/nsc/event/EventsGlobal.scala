@@ -14,10 +14,6 @@ import io.{ AbstractFile, Path }
 trait EventsGlobal extends EventsSymbolTable {
   outer: Global =>
   
-  /*val EV: EventModel {
-    val global: outer.type
-  }*/
-  
   abstract class EventModel extends super.EventModel {
     model =>
 
