@@ -4142,7 +4142,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
 
         case Star(elem) =>
           if ((mode & STARmode) == 0 && !isPastTyper)
-            Some(StarPatternWithVarargParametersError(tree))
+            StarPatternWithVarargParametersError(tree)
           treeCopy.Star(tree, typed(elem, mode, pt)) setType makeFullyDefined(pt)
 
         case Bind(name, body) =>
@@ -4452,12 +4452,12 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           // The only problematic case are Cyclic errors which can pop up almost anywhere
           printTyping("caught %s: while typing %s".format(ex, tree)) //DEBUG
           
-          ex match {
+/*          ex match {
             case _: CyclicReference =>             
             case _: RecoverableCyclicReference =>
             case _ if !isPastTyper =>
               println("TODO: TypeError cannot be thrown by during typechecking")
-          }
+          }*/
           reportTypeError(tree.pos, ex)
           setError(tree)
         case ex: Exception =>

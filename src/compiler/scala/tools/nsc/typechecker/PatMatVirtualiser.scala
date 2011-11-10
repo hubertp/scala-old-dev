@@ -369,7 +369,7 @@ trait PatMatVirtualiser extends ast.TreeDSL { self: Analyzer =>
             val extractorCall = try {
               context.undetparams = Nil
               silent(_.typed(Apply(Select(orig, extractor), List(Ident(nme.SELECTOR_DUMMY) setType fun.tpe.finalResultType)), EXPRmode, WildcardType), reportAmbiguousErrors = false) match {
-                case extractorCall: Tree => extractorCall // if !extractorCall.containsError()
+                case Right(extractorCall) => extractorCall
                 case _ =>
                   // this fails to resolve overloading properly...
                   // Apply(typedOperator(Select(orig, extractor)), List(Ident(nme.SELECTOR_DUMMY))) // no need to set the type of the dummy arg, it will be replaced anyway
@@ -666,8 +666,8 @@ trait PatMatVirtualiser extends ast.TreeDSL { self: Analyzer =>
                 // could in principle always assume unsafe and use pt = WildcardType
                 if(overrideUnsafe || unsafe) typed(to.head.shallowDuplicate, EXPRmode, WildcardType)
                 else silent(_.typed(to.head.shallowDuplicate, EXPRmode, tree.tpe.widen), false) match {
-                  case t: Tree => t // if !t.containsError()
-                  case ex => // these should be relatively rare
+                  case Right(t) => t
+                  case _ => // these should be relatively rare
                     // not necessarily a bug: e.g., in Node(_, md @ UnprefixedAttribute(_, _, _), _*),
                     // md.info == UnprefixedAttribute, whereas x._2 : MetaData
                     // (where x is the binder of the function that'll be flatMap'ed over Node's unapply;
