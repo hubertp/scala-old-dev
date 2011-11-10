@@ -14,6 +14,7 @@ trait EventsUniverse extends AnyRef with Events {
   abstract class EventModel extends AllEvents {
     val global: SymbolTable
     var isInitialized = false
+    private var eventIds = 0
     
     type EventResponse
     val NoResponse: EventResponse
@@ -53,6 +54,7 @@ trait EventsUniverse extends AnyRef with Events {
     def anyString(x: Any): String
     def flagsString(flags: Long): String
     def posString(pos: Position): String
+    def formatTypeString(tpe: Type): String
 
     // def eventFormat: String = "%foo %bar" // todo
     def joinString(xs: Any*) = xs map anyString filterNot (_ == "") mkString " "
@@ -88,16 +90,28 @@ trait EventsUniverse extends AnyRef with Events {
      *  the right thing, can be adjusted.
      */
     def isSameName(n1: Name, n2: Name) = n1.toString == n2.toString
+    
+    def resetEventsCounter {
+      eventIds = 0
+    }
 
     /** The base class for all Events.
      */
     abstract class Event {
       def tag: String   // A short description of this event
+      def lName: String = tag // Long description if different
       protected def participants: List[Any]
+      var id = { eventIds += 1; eventIds }
+      var blockStart = false // TODO refactor to VisEvent
 
       // record the phase and unit at creation
       val phase: Phase          = currentPhase
       val unit: CompilationUnit = currentUnit
+      
+       
+      // Sometimes it is necessary to force the actual string representation
+      // at the creation time since we often deal with refs and not primitive vals
+      protected val eventStringRep: String = ""
 
       protected def defaultPos = currentPos
       private var _pos: Position = defaultPos
@@ -139,10 +153,13 @@ trait EventsUniverse extends AnyRef with Events {
       }
       val formatterMap: Map[String, () => String] = Map(
         "ev" -> (() => eventString),
+        "tg" -> (() => tag),
         "cu" -> (() => unitString),
         "ph" -> (() => phase.name),
         "na" -> (() => names mkString ", "),
-        "po" -> (() => eventPosString)
+        "po" -> (() => eventPosString),
+        "id" -> (() => "#" + id),
+        "ln" -> (() => lName)
       )
       def formattedString(format: String): String = {
         val sb = new StringBuilder
@@ -172,12 +189,12 @@ trait EventsUniverse extends AnyRef with Events {
       
       def hasStringWhich(f: String => Boolean) = participants.iterator map anyString exists f
       
-      def eventString = tag
+      def eventString = joinString(participants)
       override def toString = eventString
     }
     trait UnaryEvent[+T] extends Event {
       def value: T
-      override def eventString = joinString(tag, value)
+      override def eventString = joinString(value)
       protected def participants: List[Any] = List(value)
     }
     abstract class BinaryEvent[+T] extends Event {
@@ -192,6 +209,7 @@ trait EventsUniverse extends AnyRef with Events {
       def sym: Symbol
       def value = sym
       
+      override protected val eventStringRep       = anyString(value)
       override protected def defaultPos = symbolPos(sym)
     }
     trait TwoSymEvent extends BinaryEvent[Symbol] { 
@@ -210,6 +228,28 @@ trait EventsUniverse extends AnyRef with Events {
       def tree: Tree
       def value = tree
       override protected def defaultPos = treePos(tree)
+      override protected val eventStringRep = joinString(value)
+      override def eventString = eventStringRep
+    }
+    
+    trait TwoTreeEvent extends BinaryEvent[Tree] { 
+      override protected def defaultPos = treePos(value1)
+    }
+    
+    trait TreeTypeEventUnary extends TypeEvent {
+      def tree: Tree
+      override protected def participants: List[Any] = List(tree, tpe)
+      override protected val eventStringRep = joinString(tree, tpe)
+      override def eventString = eventStringRep
+      override protected def defaultPos = treePos(tree)
+    }
+    
+    trait TreeTypeEventBinary extends TwoTypeEvent {
+      def tree1: Tree
+      def tree2: Tree
+      override protected def participants: List[Any] = List(tree1, value1, tree2, value2)
+      override def eventString = joinString(tree1, value1, tree2, value2)
+      override protected def defaultPos = treePos(tree1)
     }
 
     trait FlagEvent[+T] extends Event {
@@ -242,6 +282,14 @@ trait EventsUniverse extends AnyRef with Events {
       def mods: Modifiers
       def carrier = mods
     }
+    
+    trait ReferencesInfo[T] {
+      def references: List[T]
+    }
+    
+    trait SymbolReferencesEvent extends ReferencesInfo[Symbol]
+    
+    trait TreeReferencesEvent extends ReferencesInfo[Tree]
 
     /** Filters limit the event stream.
      */
@@ -283,6 +331,9 @@ trait EventsUniverse extends AnyRef with Events {
       def start(): this.type
       def stop(): this.type
       def show(ev: Event): Unit = ()
+
+      def startBlock: Unit
+      def endBlock: Unit
       
       def hooking[T](body: => T): T = {
         try {
@@ -310,8 +361,21 @@ trait EventsUniverse extends AnyRef with Events {
       def apply(f: Event =>? Unit): Hook 
     }
 
-    // How the compiler sends events
+    // Normal way of informing about an event
+    // Contains no information for visualization
     @elidable(2500)
     def <<(ev: Event): EventResponse
+    
+    // Event starting block
+    @elidable(2500)
+    def <<<(ev: Event): EventResponse
+    
+    // Event ending block
+    @elidable(2500)
+    def >>(ev: Event): EventResponse
+    
+    // Event ending block without actual handling of the event
+    @elidable(2500)
+    def >>>(ev: Event): EventResponse
   }
 }

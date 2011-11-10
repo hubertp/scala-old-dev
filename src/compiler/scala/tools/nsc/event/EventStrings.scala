@@ -63,8 +63,13 @@ trait EventStrings {
       case x: Long        => flagsString(x)
       case x: Position    => posString(x)
       case x: Scope       => "Scope(" + x.toList.size + " members)"
-      case x: BaseTypeSeq => (x.toList map anyStringInternal).mkString("BTS(", ", ", ")")    
+      case x: BaseTypeSeq => (x.toList map anyStringInternal).mkString("BTS(", ", ", ")")
+      case x: List[_]     => anyStringInternalList(x)
       case x              => anyStringInternal(x.asInstanceOf[AnyRef].getClass)
+    }
+    
+    private def anyStringInternalList(x: List[Any]): String = {
+      x.map(anyStringInternal).mkString("(", ",", ")")
     }
     def posString(pos: Position): String = {
       if (pos == NoPosition) ""
@@ -74,24 +79,33 @@ trait EventStrings {
     def classString(clazz: JClass[_]): String = clazz.getName split '.' last
     def symString(sym: Symbol): String        = sym.nameString
     def flagsString(flags: Long): String      = flagsToString(flags)
-    def typeString(tpe: Type): String         = 
-      if (tpe.typeSymbol != null) symString(tpe.typeSymbol)
-      else classString(tpe.getClass)
+    def typeString(tpe: Type): String         = "[" + tpe.kind + ": " + (tpe match {
+      case x:TypeRef                   => x.safeToString
+      case x:MethodType                => x.safeToString
+      case x:PolyType                  => x.safeToString
+      case x if (x.typeSymbol != null) => symString(x.typeSymbol)
+      case _                           => classString(tpe.getClass)
+    }) + "]"
+    def formatTypeString(tpe: Type): String   = "(not implemented)"
     def treeString(tree: Tree): String   = treeName(tree) match {
-      case null     => classString(tree.getClass)
-      case name     => name.toString
+      case None     => classString(tree.getClass)
+      case Some(name)     => name
     }
   
-    def treeName(tree: Tree): Name = tree match {
-      case x if x.symbol != null    => x.symbol.name
-      case x: DefTree               => x.name
-      case x: RefTree               => x.name
-      case _ =>
+    def treeName(tree: Tree): Option[String] = tree match {
+      case x if x.symbol != null && x.symbol != NoSymbol    => Some(x.symbol.name.toString)
+      case x: DefTree               => Some(x.name.toString)
+      case x: RefTree               => Some(x.name.toString)
+      case x: Literal               => Some(x.value.stringValue)
+      case x: TypeApply             => Some(x.fun.toString + x.args.map(_.toString).mkString("[", ",", "]"))
+      case _: TermTree => Some(tree.toString)
+      case _: TypTree =>
         tree match {
           case ExistentialTypeTree(tpt, _)  => treeName(tpt)
           case AppliedTypeTree(tpt, _)      => treeName(tpt)
-          case _                            => null
+          case _                            => None
         }
+      case _ => None
     }
   }
 }

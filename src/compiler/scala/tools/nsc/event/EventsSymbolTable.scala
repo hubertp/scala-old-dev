@@ -26,10 +26,17 @@ import mutable.ListBuffer
 import java.util.concurrent.{ LinkedBlockingQueue }
 import scala.reflect.internal.event.{ EventsUniverse, Events }
 
-trait EventsSymbolTable extends EventsUniverse with EventStrings with Processing with symtab.Positions {
+trait EventsSymbolTable extends EventsUniverse
+                        with EventStrings
+                        with Processing
+                        with symtab.Positions
+                        with GeneralEvents {
   outer: SymbolTable =>
   
-  abstract class EventModel extends super.EventModel with Strings with ProcessingUtil {
+  abstract class EventModel extends super.EventModel
+                            with Strings
+                            with ProcessingUtil
+                            with ControlEvents {
     model =>
 
     val global: SymbolTable
@@ -102,22 +109,7 @@ trait EventsSymbolTable extends EventsUniverse with EventStrings with Processing
     //   
     // }
     
-    case class NewParse(tree: Tree) extends TreeEvent {
-      def tag = "newParse"
-    }
-    case class ThisPhaseDone(override val unit: CompilationUnit) extends Event {
-      def tag = "phaseDone"
-      protected def participants: List[Any] = List(unit)
-    }
-    case class NewScope(scope: Scope) extends Event {
-      def tag = "newScope"
-      protected def participants: List[Any] = List(scope)
-    }
-    case class NewBaseTypeSeq(bts: BaseTypeSeq) extends Event {
-      def tag = "newBaseTypeSeq"
-      protected def participants: List[Any] = List(bts)
-    }
-    
+
     trait Hook extends AbsHook {
       def start(): this.type = {
         addHook(this)
@@ -127,6 +119,9 @@ trait EventsSymbolTable extends EventsUniverse with EventStrings with Processing
         removeHook(this)
         this
       }
+      
+      def startBlock(): Unit = ()
+      def endBlock(): Unit = ()
     }
     object Hook extends HookCompanion {      
       class SimpleHook(f: Event => Unit) extends Hook {
@@ -136,14 +131,52 @@ trait EventsSymbolTable extends EventsUniverse with EventStrings with Processing
         override def show(ev: Event) = Console println (ev formattedString fmt)
         def action(ev: Event): Unit = show(ev)
       }
+      class IndentationHook(f: (Int) => (Event) => Unit) extends Hook {
+        private var _indent: Int = 0
+        def indentSize = _indent
+        override def startBlock() {
+          _indent += 1 
+        }
+  
+        override def endBlock() {
+          //Cyclic errors can still break this assert. We should have a fallback which closes blocks automatically
+          // by looking into exceptions stacktrace
+          
+          assert(_indent >= 0, "indent counter below zero")
+          _indent -= 1
+        }
+
+        // Used when exception is propagated and 
+        // we revert to last known place
+        def resetIndentation(a: Int) = _indent = a
+        override def action(ev: Event): Unit = {
+          f(_indent)(ev)
+        }
+      }
+      
+      def indentation(pf: Int => Event =>? Unit): IndentationHook = {
+        val (filt, fn) = Filter decomposeIndent pf
+        new IndentationHook(fn) filterBy filt
+      }
+      
       def apply(pf: Event =>? Unit): Hook = {
         val (filt, fn) = Filter decompose pf
-        
         new SimpleHook(fn) filterBy filt
       }
       def start(pf: Event =>? Unit): Hook = apply(pf).start
       def log(): Hook = log("[%ph] %ev %po")
       def log(fmt: String): Hook = new LoggerHook(fmt)
+    }
+    
+    trait IndendationFilterCompanion {
+      self: FilterCompanion =>
+      
+      type IndentSign[R] = Int => Event => R
+      
+      def decomposeIndent[R](f: IndentSign[R]): (Filter, IndentSign[R]) = {
+        val (filtr, _) = decompose(f(0))
+        (filtr, f)
+      }
     }
     
     object EVDSL {
@@ -157,9 +190,13 @@ trait EventsSymbolTable extends EventsUniverse with EventStrings with Processing
 
         def <=(id: Int): Filter = <=(phaseWithId(id))
         def >=(id: Int): Filter = >=(phaseWithId(id))
+        def ==(id: Int): Filter = ==(phaseWithId(id))
 
-        def <=(maxPhase: Phase): Filter    = Filter("phase < " + maxPhase.name, _.phase <= maxPhase)
-        def >=(minPhase: Phase): Filter    = Filter(minPhase.name + " < phase", minPhase <= _.phase)
+        // phaseWithId might be called before the phases are yet initialised
+        // so call them properly when compiler reaches already the phase
+        def <=(maxPhase: => Phase): Filter = Filter("phase < " + maxPhase.name, _.phase <= maxPhase)
+        def >=(minPhase: => Phase): Filter = Filter(minPhase.name + " < phase", minPhase <= _.phase)
+        def ==(eqPhase : => Phase): Filter = Filter("phase eq " + eqPhase.name, eqPhase == _.phase)
       }
 
       object ev {
@@ -176,12 +213,17 @@ trait EventsSymbolTable extends EventsUniverse with EventStrings with Processing
           _ match { case x: FlagEvent[_] => x didChangeFlag mask ; case _ => false }
         )
       }
+      
+      object id {
+        def <=(id: Int): Filter = Filter("event.id < " + id, _.id <= id)   
+        def >=(id: Int): Filter = Filter(id + " < event.id", id <= _.id)
+      }
     }
     
     
     trait Filter extends AbsFilter {      
     }
-    object Filter extends FilterCompanion {
+    object Filter extends FilterCompanion with IndendationFilterCompanion {
       /** Look ma, it's short circuiting. */
       type BoolMerge  = Boolean => (=> Boolean) => Boolean
       case class Comb(name: String, op: BoolMerge) { }
@@ -208,8 +250,41 @@ trait EventsSymbolTable extends EventsUniverse with EventStrings with Processing
     def <<(ev: Event): Unit = {
       if (eventsOn) {
         dlog(ev.toString)
+        //assert(!ev.isInstanceOf[DoneBlock])
         eventHooks foreach (_ applyIfDefined ev)
       }
     }
+    
+    def <<<(ev: Event): Unit = {
+      if (eventsOn) {
+        // start block
+        ev.blockStart = true
+        dlog(ev.toString)
+        //assert(!ev.isInstanceOf[DoneBlock])
+        eventHooks foreach (h => {h applyIfDefined ev; h.startBlock })
+      }
+    }
+    
+    def >>>(ev: Event): Unit = {
+      if (eventsOn) {
+        // end block
+        dlog(ev.toString)
+        //assert(ev.isInstanceOf[DoneBlock], ev.getClass + " should be an instance of DoneBlock")
+        // Should update tag to super.tag`-done`
+        // but cannot do it easily without forwarding everything
+        eventHooks foreach (h => {h applyIfDefined ev; h.endBlock})
+      }
+    }
+    
+    def >>(ev: Event): Unit = {
+      if (eventsOn) {
+        // end block
+        dlog(ev.toString)
+        //assert(ev.isInstanceOf[DoneBlock], ev.getClass + " should be an instance of DoneBlock")
+        // Should update tag to super.tag`-done`
+        // but cannot do it easily without forwarding everything
+        eventHooks foreach (h => {h applyIfDefined ev; h.endBlock})
+      }
+    }    
   }
 }
