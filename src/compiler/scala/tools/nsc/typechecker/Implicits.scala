@@ -70,7 +70,7 @@ trait Implicits {
       context.updateBuffer(toKeep)
     }
     printInference("[inferImplicit] result: " + result)
-    context.undetparams = context.undetparams filterNot result.subst.fromContains
+    context.undetparams = context.undetparams filterNot result.subst.from.contains
 
     stopTimer(implicitNanos, start)
     stopCounter(rawTypeImpl, rawTypeStart)
@@ -309,7 +309,7 @@ trait Implicits {
         case NoPrefix =>
           0
         case SingleType(pre, sym) => 
-          if (sym.isPackage) 0 else complexity(tp.widen)
+          if (sym.isPackage) 0 else complexity(tp.normalize.widen)
         case TypeRef(pre, sym, args) => 
           complexity(pre) + sum(args map complexity) + 1
         case RefinedType(parents, _) => 

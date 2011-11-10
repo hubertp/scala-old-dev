@@ -559,12 +559,20 @@ trait Types extends api.Types { self: SymbolTable =>
      */
     def asSeenFrom(pre: Type, clazz: Symbol): Type =
       if (isTrivial || phase.erasedTypes && pre.typeSymbol != ArrayClass) this
-      else {
+      else {       
+//        scala.tools.nsc.util.trace.when(pre.isInstanceOf[ExistentialType])("X "+this+".asSeenfrom("+pre+","+clazz+" = ") {
         incCounter(asSeenFromCount)
         val start = startTimer(asSeenFromNanos)
         val m = new AsSeenFromMap(pre.normalize, clazz)
         val tp = m apply this
-        val result = existentialAbstraction(m.capturedParams, tp)
+        val tp1 = existentialAbstraction(m.capturedParams, tp)
+        val result: Type = 
+          if (m.capturedSkolems.isEmpty) tp1 
+          else {
+            val captured = cloneSymbols(m.capturedSkolems)
+            captured foreach (_ setFlag CAPTURED)
+            tp1.substSym(m.capturedSkolems, captured)
+          }
         stopTimer(asSeenFromNanos, start)
         result
       }
@@ -2092,7 +2100,7 @@ A type's typeSymbol should never be inspected directly.
     
     override def paramTypes = params map (_.tpe)
 
-    override def boundSyms = immutable.Set[Symbol](params ++ resultType.boundSyms: _*)
+    override def boundSyms = resultType.boundSyms ++ params
 
     override def resultType(actuals: List[Type]) = 
       if (isTrivial || phase.erasedTypes) resultType
@@ -3471,15 +3479,10 @@ A type's typeSymbol should never be inspected directly.
         variance = v
         result ne sym.info
       }
-      if (!change) origSyms // fast path in case nothing changes due to map
-      else { // map is not the identity --> do cloning properly
-        val clonedSyms       = origSyms map (_.cloneSymbol)
-        val clonedInfos      = clonedSyms map (_.info.substSym(origSyms, clonedSyms))
-        val transformedInfos = clonedInfos mapConserve (this)
-
-        (clonedSyms, transformedInfos).zipped foreach (_ setInfo _)
-        clonedSyms
-      }
+      // map is not the identity --> do cloning properly
+      if (change) cloneSymbols(origSyms) map (s => s setInfo this(s.info))
+      // fast path in case nothing changes due to map
+      else origSyms
     }
 
     def mapOver(annot: AnnotationInfo): AnnotationInfo = {
@@ -3531,7 +3534,7 @@ A type's typeSymbol should never be inspected directly.
       }
     }
   }
-
+  
   abstract class TypeTraverser extends TypeMap {
     def traverse(tp: Type): Unit
     def apply(tp: Type): Type = { traverse(tp); tp }
@@ -3605,7 +3608,8 @@ A type's typeSymbol should never be inspected directly.
 
   /** A map to compute the asSeenFrom method  */
   class AsSeenFromMap(pre: Type, clazz: Symbol) extends TypeMap with KeepOnlyTypeConstraints {
-    var capturedParams: List[Symbol] = List() 
+    var capturedSkolems: List[Symbol] = List() 
+    var capturedParams: List[Symbol] = List()
 
     override def mapOver(tree: Tree, giveup: ()=>Nothing): Tree = {
       object annotationArgRewriter extends TypeMapTransformer {
@@ -3678,7 +3682,7 @@ A type's typeSymbol should never be inspected directly.
                 pre1
               }
             } else {
-              toPrefix(base(pre, clazz).prefix, clazz.owner);
+              toPrefix(base(pre, clazz).prefix, clazz.owner)
             }
           toPrefix(pre, clazz)
         case SingleType(pre, sym) =>
@@ -3753,7 +3757,7 @@ A type's typeSymbol should never be inspected directly.
                           basesym.typeParams.map(_.name).mkString("[",",","]")+
                           " gets applied to arguments "+baseargs.mkString("[",",","]")+", phase = "+phase)
                   case ExistentialType(tparams, qtpe) =>
-                    capturedParams = capturedParams union tparams
+                    capturedSkolems = capturedSkolems union tparams
                     toInstance(qtpe, clazz)
                   case t =>
                     throwError
@@ -3768,7 +3772,6 @@ A type's typeSymbol should never be inspected directly.
 
   /** A base class to compute all substitutions */
   abstract class SubstMap[T](from: List[Symbol], to: List[T]) extends TypeMap {
-    val fromContains = (x: Symbol) => from.contains(x) //from.toSet <-- traversing short lists seems to be faster than allocating sets
     assert(sameLength(from, to), "Unsound substitution from "+ from +" to "+ to)
 
     /** Are `sym` and `sym1` the same? Can be tuned by subclasses. */
@@ -3799,7 +3802,7 @@ A type's typeSymbol should never be inspected directly.
         else subst(tp, sym, from.tail, to.tail)
 
       val boundSyms = tp0.boundSyms
-      val tp1 = if (boundSyms exists fromContains) renameBoundSyms(tp0) else tp0
+      val tp1 = if (boundSyms exists from.contains) renameBoundSyms(tp0) else tp0
       val tp = mapOver(tp1)
       
       tp match {
@@ -3851,11 +3854,10 @@ A type's typeSymbol should never be inspected directly.
     override def mapOver(tree: Tree, giveup: ()=>Nothing): Tree = {
       object trans extends TypeMapTransformer {
 
-        def termMapsTo(sym: Symbol) =
-          if (fromContains(sym))
-            Some(to(from.indexOf(sym)))
-          else
-            None
+        def termMapsTo(sym: Symbol) = from indexOf sym match {
+          case -1   => None
+          case idx  => Some(to(idx))
+        }
 
         override def transform(tree: Tree) = 
           tree match {
@@ -3884,21 +3886,23 @@ A type's typeSymbol should never be inspected directly.
   extends SubstMap(from, to) {
     protected def toType(fromtp: Type, tp: Type) = tp 
 
-    override def mapOver(tree: Tree, giveup: ()=>Nothing): Tree = {
+    override def mapOver(tree: Tree, giveup: () => Nothing): Tree = {
       object trans extends TypeMapTransformer {
-        override def transform(tree: Tree) = 
-          tree match {
-            case Ident(name) if fromContains(tree.symbol) =>
-              val totpe = to(from.indexOf(tree.symbol))
-              if (!totpe.isStable) giveup()
-              else Ident(name).setPos(tree.pos).setSymbol(tree.symbol).setType(totpe)
-
-            case _ => super.transform(tree)
-          }
+        override def transform(tree: Tree) = tree match {
+          case Ident(name) =>
+            from indexOf tree.symbol match {
+              case -1   => super.transform(tree)
+              case idx  =>
+                val totpe = to(idx)
+                if (totpe.isStable) tree.duplicate setType totpe
+                else giveup()
+            }
+          case _ =>
+            super.transform(tree)
+        }
       }
       trans.transform(tree)
     }
-
   }
 
   /** A map to implement the `substThis` method. */
