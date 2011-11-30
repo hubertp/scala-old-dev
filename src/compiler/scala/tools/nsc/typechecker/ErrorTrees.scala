@@ -411,8 +411,8 @@ trait ContextErrors {
       def ClassfileAnnotationsAsNamedArgsError(tree: Tree) =
         NormalTypeError(tree, "classfile annotation arguments have to be supplied as named arguments")
 
-      def AnnotationMissingArgError(tree: Tree, annType: Type, name: Symbol) =
-        NormalTypeError(tree, "annotation " + annType.typeSymbol.fullName + " is missing argument " + name.name)
+      def AnnotationMissingArgError(tree: Tree, annType: Type, sym: Symbol) =
+        NormalTypeError(tree, "annotation " + annType.typeSymbol.fullName + " is missing argument " + sym.name)
 
       def NestedAnnotationError(tree: Tree, annType: Type) =
         NormalTypeError(tree, "nested classfile annotations must be defined in java; found: "+ annType)
@@ -605,7 +605,9 @@ trait ContextErrors {
     // checkNoDoubleDefs...
       def DefDefinedTwiceError(sym0: Symbol, sym1: Symbol) =
         // TODO setError
-        issueSymbolTypeError(sym0, sym1+" is defined twice"+{if(!settings.debug.value) "" else " in "+context0.unit})
+        issueSymbolTypeError(sym0, sym1+" is defined twice"+
+                                   {if(!settings.debug.value) "" else " in "+context0.unit}+
+                                   {if (sym0.isMacro && sym1.isMacro) " \n(note that macros cannot be overloaded)" else ""})
 
       // cyclic errors
      def CyclicAliasingOrSubtypingError(errPos: Position, sym0: Symbol) =

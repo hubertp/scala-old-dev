@@ -364,7 +364,8 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
             overrideError("cannot be used here - classes can only override abstract types");
           } else if (other.isFinal) { // (1.2)
             overrideError("cannot override final member");
-          } else if (!other.isDeferred && !member.isAnyOverride) {
+            // synthetic exclusion needed for (at least) default getters.
+          } else if (!other.isDeferred && !member.isAnyOverride && !member.isSynthetic) { 
             overrideError("needs `override' modifier");
           } else if (other.isAbstractOverride && other.isIncompleteIn(clazz) && !member.isAbstractOverride) {
             overrideError("needs `abstract override' modifiers")
@@ -1224,6 +1225,7 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
           List(tree1)
         }
       case Import(_, _) => Nil
+      case DefDef(mods, _, _, _, _, _) if (mods hasFlag MACRO) => Nil
       case _            => List(transform(tree))
     }
 
@@ -1563,15 +1565,12 @@ abstract class RefChecks extends InfoTransform with reflect.internal.transform.R
             }
 
             val existentialParams = new ListBuffer[Symbol]
-            doTypeTraversal(tree) { // check all bounds, except those that are
-                              // existential type parameters
+            doTypeTraversal(tree) { // check all bounds, except those that are existential type parameters
               case ExistentialType(tparams, tpe) => 
                 existentialParams ++= tparams
               case t: TypeRef => 
-                val exparams = existentialParams.toList
-                val wildcards = exparams map (_ => WildcardType)
-                checkTypeRef(t.subst(exparams, wildcards), tree)
-              case _ => 
+                checkTypeRef(deriveTypeWithWildcards(existentialParams.toList)(t), tree)
+              case _ =>
             }
             tree
 
