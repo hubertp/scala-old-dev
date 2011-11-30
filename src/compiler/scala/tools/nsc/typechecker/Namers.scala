@@ -482,8 +482,10 @@ trait Namers extends MethodSynthesis {
               typeSig(tree)
             }
             // for Java code importing Scala objects
-            else if (!nme.isModuleName(from) || isValid(nme.stripModuleSuffix(from)))
+            else if (!nme.isModuleName(from) || isValid(nme.stripModuleSuffix(from))) {
               typer.TyperErrorGen.NotAMemberError(tree, expr, from)
+              typer.infer.setError(tree)
+            }
           }
           // Setting the position at the import means that if there is
           // more than one hidden name, the second will not be warned.

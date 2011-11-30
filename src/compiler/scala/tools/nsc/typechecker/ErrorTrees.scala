@@ -299,7 +299,10 @@ trait ContextErrors {
             )
         }
         issueNormalTypeError(sel, errMsg)
-        setError(sel)
+        // the error has to be set for the copied tree, otherwise
+        // the error remains persistent acros multiple compilations
+        // and causes problems
+        //setError(sel)
       }
 
       //typedNew

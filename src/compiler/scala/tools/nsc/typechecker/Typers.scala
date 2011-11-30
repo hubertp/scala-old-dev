@@ -3509,7 +3509,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                   val qual1 = typedQualifier(qual)
                   if (treeInfo.isVariableOrGetter(qual1)) {
                     stopTimer(failedOpEqNanos, opeqStart)
-                    convertToAssignment(fun, qual1, name, args) 
+                    convertToAssignment(fun, qual1, name, args)
                   } else {
                     stopTimer(failedApplyNanos, appStart)
                     if ((qual1.symbol ne null) && qual1.symbol.isValue)
