@@ -85,13 +85,13 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
     isInitialized = true
   }
 
-  type ThisPlatform = Platform[_] { val global: Global.this.type }
+  type ThisPlatform = Platform { val global: Global.this.type }
   
   lazy val platform: ThisPlatform =
     if (forMSIL) new { val global: Global.this.type = Global.this } with MSILPlatform
     else new { val global: Global.this.type = Global.this } with JavaPlatform
 
-  def classPath: ClassPath[_] = platform.classPath
+  def classPath: ClassPath[platform.BinaryRepr] = platform.classPath
   def rootLoader: LazyType = platform.rootLoader
 
   // sub-components --------------------------------------------------
@@ -330,6 +330,10 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
   // to create it on that side.  For this one my strategy is a constant def at the file
   // where I need it, and then an override in Global with the setting.
   override protected val etaExpandKeepsStar = settings.etaExpandKeepsStar.value
+  // Here comes another one...
+  override protected val enableTypeVarExperimentals = (
+    settings.Xexperimental.value || settings.YvirtPatmat.value
+  )
 
   // True if -Xscript has been set, indicating a script run.
   def isScriptRun = opt.script.isDefined
@@ -440,7 +444,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
   } with Pickler
  
   // phaseName = "refchecks"
-  object refChecks extends {
+  override object refChecks extends {
     val global: Global.this.type = Global.this
     val runsAfter = List[String]("pickler")
     val runsRightAfter = None
@@ -454,7 +458,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
   } with LiftCode
  
   // phaseName = "uncurry"
-  object uncurry extends {
+  override object uncurry extends {
     val global: Global.this.type = Global.this
     val runsAfter = List[String]("refchecks", "liftcode")
     val runsRightAfter = None
@@ -482,7 +486,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
   } with SpecializeTypes
 
   // phaseName = "erasure"
-  object erasure extends {
+  override object erasure extends {
     val global: Global.this.type = Global.this
     val runsAfter = List[String]("explicitouter")
     val runsRightAfter = Some("explicitouter")
@@ -739,6 +743,34 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
   private var curRun: Run = null
   private var curRunId = 0
 
+  /** A hook that lets subclasses of `Global` define whether a package or class should be kept loaded for the 
+   *  next compiler run. If the parameter `sym` is a class or object, and `clearOnNextRun(sym)` returns `true`,
+   *  then the symbol is unloaded and reset to its state before the last compiler run. If the parameter `sym` is 
+   *  a package, and clearOnNextRun(sym)` returns `true`, the package is recursively searched for 
+   *  classes to drop. 
+   *  
+   *  Example: Let's say I want a compiler that drops all classes corresponding to the current project
+   *  between runs. Then `keepForNextRun` of a toplevel class or object should return `true` if the 
+   *  class or object does not form part of the current project, `false` otherwise. For a package,
+   *  clearOnNextRun should return `true` if no class in that package forms part of the current project,
+   *  `false` otherwise.
+   *  
+   *  @param    sym A class symbol, object symbol, package, or package class.
+   */
+  def clearOnNextRun(sym: Symbol) = false
+    /* To try out clearOnNext run on the scala.tools.nsc project itself
+     * replace `false` above with the following code
+    
+    settings.Xexperimental.value && { sym.isRoot || {
+      sym.fullName match {
+        case "scala" | "scala.tools" | "scala.tools.nsc" => true
+        case _ => sym.owner.fullName.startsWith("scala.tools.nsc")
+      }
+    }}
+    
+     * Then, fsc -Xexperimental clears the nsc porject between successive runs of `fsc`.
+     */
+  
   /** Remove the current run when not needed anymore. Used by the build
    *  manager to save on the memory foot print. The current run holds on 
    *  to all compilation units, which in turn hold on to trees.
@@ -817,6 +849,46 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
         else terminal newPhase lastPhase
       
       parserPhase
+    }
+    
+    /** Reset all classes contained in current project, as determined by
+     *  the clearOnNextRun hook
+     */
+    def resetProjectClasses(root: Symbol): Unit = try {
+      def unlink(sym: Symbol) = 
+        if (sym != NoSymbol) root.info.decls.unlink(sym)
+      if (settings.verbose.value) inform("[reset] recursing in "+root)
+      val toReload = mutable.Set[String]()
+      for (sym <- root.info.decls) {
+        if (sym.isInitialized && clearOnNextRun(sym))
+          if (sym.isPackage) {
+            resetProjectClasses(sym.moduleClass)
+            openPackageModule(sym.moduleClass)
+          } else {
+            unlink(sym)
+            unlink(root.info.decls.lookup(
+              if (sym.isTerm) sym.name.toTypeName else sym.name.toTermName))
+            toReload += sym.fullName 
+              // note: toReload could be set twice with the same name
+              // but reinit must happen only once per name. That's why
+              // the following classPath.findClass { ... } code cannot be moved here.
+          }
+      }
+      for (fullname <- toReload)
+        classPath.findClass(fullname) match {
+          case Some(classRep) => 
+            if (settings.verbose.value) inform("[reset] reinit "+fullname)
+            loaders.initializeFromClassPath(root, classRep)
+          case _ => 
+        }
+    } catch {
+      case ex: Throwable => 
+        // this handler should not be nessasary, but it seems that `fsc` 
+        // eats exceptions if they appear here. Need to find out the cause for
+        // this and fix it.
+        inform("[reset] exception happened: "+ex); 
+        ex.printStackTrace(); 
+        throw ex
     }
 
     // --------------- Miscellania -------------------------------
@@ -1128,6 +1200,11 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
 
       // Clear any sets or maps created via perRunCaches.
       perRunCaches.clearAll()
+      
+      // Reset project
+      atPhase(namerPhase) {
+        resetProjectClasses(definitions.RootClass)
+      }
     }
 
     /** Compile list of abstract files. */
@@ -1242,7 +1319,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
 
   def printAllUnits() {
     print("[[syntax trees at end of " + phase + "]]")
-    atPhase(phase.next) { currentRun.units foreach treePrinter.print }
+    atPhase(phase.next) { currentRun.units foreach (treePrinter.print(_)) }
   }
 
   private def findMemberFromRoot(fullName: Name): Symbol = {    
@@ -1350,10 +1427,11 @@ object Global {
     // !!! The classpath isn't known until the Global is created, which is too
     // late, so we have to duplicate it here.  Classpath is too tightly coupled,
     // it is a construct external to the compiler and should be treated as such.
-    val loader = ScalaClassLoader.fromURLs(new PathResolver(settings).result.asURLs)
-    val name   = settings.globalClass.value
-    val clazz  = Class.forName(name, true, loader)
-    val cons   = clazz.getConstructor(classOf[Settings], classOf[Reporter])
+    val parentLoader = settings.explicitParentLoader getOrElse getClass.getClassLoader
+    val loader       = ScalaClassLoader.fromURLs(new PathResolver(settings).result.asURLs, parentLoader)
+    val name         = settings.globalClass.value
+    val clazz        = Class.forName(name, true, loader)
+    val cons         = clazz.getConstructor(classOf[Settings], classOf[Reporter])
 
     cons.newInstance(settings, reporter).asInstanceOf[Global]
   }

@@ -391,6 +391,11 @@ LOCAL REFERENCE BUILD (LOCKER)
       <pathelement location="${build-locker.dir}/classes/compiler"/>
       <path refid="aux.libs"/>
     </path>
+    <path id="quick.classpath">
+      <pathelement location="${build-quick.dir}/classes/library"/>
+      <pathelement location="${build-quick.dir}/classes/compiler"/>
+      <path refid="aux.libs"/>
+    </path>
   </target>
   
   <target name="locker.clean" depends="palo.clean">
@@ -611,7 +616,7 @@ QUICK BUILD (QUICK)
     <mkdir dir="${build-quick.dir}/classes/continuations-plugin"/>
     <scalacfork
       destdir="${build-quick.dir}/classes/continuations-plugin"
-      compilerpathref="locker.classpath"
+      compilerpathref="quick.classpath"
       params="${scalac.args.quick}"
       srcdir="${src.dir}/continuations/plugin"
       jvmargs="${scalacfork.jvmargs}">
@@ -634,12 +639,14 @@ QUICK BUILD (QUICK)
     <!-- might split off library part into its own ant target -->
     <scalacfork
       destdir="${build-quick.dir}/classes/library"
-      compilerpathref="locker.classpath"
-      params="${scalac.args.quick} -Xpluginsdir ${build-quick.dir}/misc/scala-devel/plugins -Xplugin-require:continuations -P:continuations:enable"
+      compilerpathref="quick.classpath"
+      params="${scalac.args.quick} -Xplugin-require:continuations -P:continuations:enable"
       srcdir="${src.dir}/continuations/library"
       jvmargs="${scalacfork.jvmargs}">
       <include name="**/*.scala"/>
       <compilationpath refid="quick.compilation.path"/>
+      <compilerarg value="-Xpluginsdir"/>
+      <compilerarg file="${build-quick.dir}/misc/scala-devel/plugins"/>
     </scalacfork>
     <touch file="${build-quick.dir}/plugins.complete" verbose="no"/>
     <stopwatch name="quick.plugins.timer" action="total"/>
@@ -649,7 +656,7 @@ QUICK BUILD (QUICK)
     <mkdir dir="${build-quick.dir}/classes/scalacheck"/>
     <scalacfork
       destdir="${build-quick.dir}/classes/scalacheck"
-      compilerpathref="locker.classpath"
+      compilerpathref="quick.classpath"
       params="${scalac.args.all}"
       srcdir="${src.dir}/scalacheck"
       jvmargs="${scalacfork.jvmargs}">
@@ -672,7 +679,7 @@ QUICK BUILD (QUICK)
     <mkdir dir="${build-quick.dir}/classes/scalap"/>
     <scalacfork
       destdir="${build-quick.dir}/classes/scalap"
-      compilerpathref="locker.classpath"
+      compilerpathref="quick.classpath"
       params="${scalac.args.quick}"
       srcdir="${src.dir}/scalap"
       jvmargs="${scalacfork.jvmargs}">
@@ -714,7 +721,7 @@ QUICK BUILD (QUICK)
     </javac>
     <scalacfork
       destdir="${build-quick.dir}/classes/partest"
-      compilerpathref="locker.classpath"
+      compilerpathref="quick.classpath"
       params="${scalac.args.quick}"
       srcdir="${src.dir}/partest"
       jvmargs="${scalacfork.jvmargs}">
@@ -1148,11 +1155,13 @@ BOOTSTRAPPING BUILD (STRAP)
     <scalacfork
       destdir="${build-strap.dir}/classes/library"
       compilerpathref="pack.classpath"
-      params="${scalac.args.all} -Xpluginsdir ${build-strap.dir}/misc/scala-devel/plugins -Xplugin-require:continuations -P:continuations:enable"
+      params="${scalac.args.all} -Xplugin-require:continuations -P:continuations:enable"
       srcdir="${src.dir}/continuations/library"
       jvmargs="${scalacfork.jvmargs}">
       <include name="**/*.scala"/>
       <compilationpath refid="strap.compilation.path"/>
+      <compilerarg value="-Xpluginsdir"/>
+      <compilerarg file="${build-strap.dir}/misc/scala-devel/plugins"/>
     </scalacfork>
     <touch file="${build-strap.dir}/plugins.complete" verbose="no"/>
     <stopwatch name="strap.plugins.timer" action="total"/>
@@ -1556,6 +1565,20 @@ BOOTRAPING TEST AND TEST SUITE
     </partest>
   </target>
 
+  <target name="test.ant" depends="pack.done">
+    <property name="partest.srcdir" value="files" />
+    <partest showlog="yes" erroronfailed="yes" javacmd="${java.home}/bin/java"
+             srcdir="${partest.srcdir}"
+             scalacopts="${scalac.args.optimise}">
+      <compilationpath>
+        <path refid="pack.classpath"/>
+        <pathelement location="${pack.dir}/lib/scala-swing.jar"/>
+        <fileset dir="${partest.dir}/files/lib" includes="*.jar" />
+      </compilationpath>
+      <anttests dir="${partest.dir}/${partest.srcdir}/ant" includes="*build.xml"/>
+    </partest>
+  </target>
+
   <target name="test.suite" depends="pack.done">
     <property name="partest.srcdir" value="files" />
     <partest showlog="yes" erroronfailed="yes" javacmd="${java.home}/bin/java"
@@ -1593,7 +1616,9 @@ BOOTRAPING TEST AND TEST SUITE
     <partest showlog="yes" erroronfailed="yes" javacmd="${java.home}/bin/java"
              timeout="2400000"
              srcdir="${partest.srcdir}"
-             scalacopts="${scalac.args.optimise} -Xpluginsdir ${build-quick.dir}/misc/scala-devel/plugins -Xplugin-require:continuations -P:continuations:enable">
+             scalacopts="${scalac.args.optimise} -Xplugin-require:continuations -P:continuations:enable">
+      <compilerarg value="-Xpluginsdir"/>
+      <compilerarg file="${build-quick.dir}/misc/scala-devel/plugins"/>
       <compilationpath>
         <path refid="pack.classpath"/>
         <fileset dir="${partest.dir}/files/lib" includes="*.jar" />
@@ -1604,14 +1629,12 @@ BOOTRAPING TEST AND TEST SUITE
   </target>
 
   <target name="test.scaladoc" depends="pack.done">
-    <partest erroronfailed="yes" scalacopts="${scalac.args.optimise}"
-             showlog="yes">
+    <partest erroronfailed="yes" scalacopts="${scalac.args.optimise}" showlog="yes">
       <compilationpath>
         <path refid="pack.classpath"/>
+        <fileset dir="${partest.dir}/files/lib" includes="*.jar" />
       </compilationpath>
-      <scalachecktests dir="test/scaladoc/scala">
-        <include name="**/*.scala"/>
-      </scalachecktests>
+      <scalachecktests dir="${partest.dir}/scaladoc/scala" includes="**/*.scala" />
     </partest>
   </target>
 

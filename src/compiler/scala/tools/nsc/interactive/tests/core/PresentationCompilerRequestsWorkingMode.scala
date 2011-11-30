@@ -45,6 +45,8 @@ trait PresentationCompilerRequestsWorkingMode extends TestResources {
         println("TIMEOUT: " + showPos(pos))
       case Some(r) =>
         println("ERROR: " + r)
+        if (r.right.get.isInstanceOf[Exception])
+          r.right.get.asInstanceOf[Exception].printStackTrace()
     }
   }
 }
