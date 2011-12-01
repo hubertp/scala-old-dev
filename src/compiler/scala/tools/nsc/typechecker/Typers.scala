@@ -3472,9 +3472,8 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                 case _ => ()
               }
             }
-            issue(typeError)
-            // TODO change to treeCopy.Apply(tree, fun, args)
-            setError(tree)
+            issue(typeError)            
+            setError(treeCopy.Apply(tree, fun, args))
         }
         
         silent(_.doTypedApply(tree, fun, args, mode, pt)) match {
