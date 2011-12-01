@@ -6141,6 +6141,7 @@ A type's typeSymbol should never be inspected directly.
   }
   
   //TODO: it shouldn't extend TypeError but that involves changing quite a lot of code
+  // so let's leave it for further refactoring
   /** An exception for cyclic references from which we can recover */
   case class RecoverableCyclicReference(sym: Symbol)
   extends TypeError("illegal cyclic reference involving " + sym)

@@ -382,7 +382,7 @@ trait NamesDefaults { self: Analyzer =>
       if (missing forall (_.hasDefaultFlag)) {
         val defaultArgs = missing flatMap (p => {
           val defGetter = defaultGetter(p, context)
-          // TODO #3649 can create spurious errors when companion object is gone (unlinked from scope)
+          // TODO #3649 can create spurious errors when companion object is gone (because it becomes unlinked from scope)
           if (defGetter == NoSymbol) None // prevent crash in erroneous trees, #3649
           else {
             var default1 = qual match {

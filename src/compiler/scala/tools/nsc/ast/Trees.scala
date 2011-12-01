@@ -18,8 +18,7 @@ trait Trees extends reflect.internal.Trees { self: Global =>
   
   // --- additional cases --------------------------------------------------------
   /** Only used during parsing */
-  case class Parens(args: List[Tree]) extends Tree {
-  }
+  case class Parens(args: List[Tree]) extends Tree
 
   /** Documented definition, eliminated by analyzer */
   case class DocDef(comment: DocComment, definition: Tree)
@@ -35,17 +34,14 @@ trait Trees extends reflect.internal.Trees { self: Global =>
    *  eliminated by typecheck (doTypedApply)
    */
   case class AssignOrNamedArg(lhs: Tree, rhs: Tree)
-       extends TermTree {
-  }
+       extends TermTree
   
  /** Array selection <qualifier> . <name> only used during erasure */
   case class SelectFromArray(qualifier: Tree, name: Name, erasure: Type)
-       extends TermTree with RefTree {
-  }
+       extends TermTree with RefTree
   
   /** emitted by typer, eliminated by refchecks */
-  case class TypeTreeWithDeferredRefCheck()(val check: () => TypeTree) extends TypTree {
-  }
+  case class TypeTreeWithDeferredRefCheck()(val check: () => TypeTree) extends TypTree
   
   // --- factory methods ----------------------------------------------------------
 
@@ -154,9 +150,7 @@ trait Trees extends reflect.internal.Trees { self: Global =>
     case SelectFromArray(qualifier, selector, erasure) =>
       traverser.traverse(qualifier)
     case TypeTreeWithDeferredRefCheck() =>
-      // TODO: should we traverse the wrapped tree?
-      // (and rewrap the result? how to update the deferred check?
-      // would need to store wrapped tree instead of returning it from check)
+      // (and rewrap the result? how to update the deferred check? would need to store wrapped tree instead of returning it from check)
     case _ => super.xtraverse(traverser, tree)
   }
     
@@ -257,9 +251,6 @@ trait Trees extends reflect.internal.Trees { self: Global =>
       tree.symbol = NoSymbol
     }
     override def traverse(tree: Tree): Unit = {
-      //tree.resetErrorBits() 
-        // [Martin] I believe the commented statement above not right. errorBits reflect the invariant that a subtree is an ErrorTree. 
-        // THhat's unaffected by resetAttrs.
       tree match {
         case _: DefTree | Function(_, _) | Template(_, _, _) =>
           resetDef(tree)

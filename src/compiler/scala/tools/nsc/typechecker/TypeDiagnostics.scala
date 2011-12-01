@@ -460,9 +460,8 @@ trait TypeDiagnostics {
      */
     def reportTypeError(context0: Analyzer#Context, pos: Position, ex: TypeError) {
       if (ex.pos == NoPosition) ex.pos = pos
-      // TODO: should it be !reportErrors only for now
-      // cannot be throwErrors yet, because then things are not propagated
-      // and tests fail. Investigate why.
+      // TODO: replace !reportErrors with throwErrors
+      // Currently if you do this errors are not propagated and tests fail. Investigate why.
       if (!context0.reportErrors) throw ex
       if (settings.debug.value) ex.printStackTrace()
 

@@ -33,16 +33,18 @@ trait Implicits {
 
   /** Search for an implicit value. See the comment on `result` at the end of class `ImplicitSearch`
    *  for more info how the search is conducted. 
-   *  @param tree             The tree for which the implicit needs to be inserted.
-   *                          (the inference might instantiate some of the undetermined
-   *                          type parameters of that tree.
-   *  @param pt               The expected type of the implicit.
-   *  @param reportAmbiguous  Should ambiguous implicit errors be reported?
-   *                          False iff we search for a view to find out
-   *                          whether one type is coercible to another.
-   *  @param isView           We are looking for a view
-   *  @param context          The current context
-   *  @return                 A search result
+   *  @param tree                    The tree for which the implicit needs to be inserted.
+   *                                 (the inference might instantiate some of the undetermined
+   *                                 type parameters of that tree.
+   *  @param pt                      The expected type of the implicit.
+   *  @param reportAmbiguous         Should ambiguous implicit errors be reported?
+   *                                 False iff we search for a view to find out
+   *                                 whether one type is coercible to another.
+   *  @param isView                  We are looking for a view
+   *  @param context                 The current context
+   *  @param saveAmbiguousDivergent  False if any divergent/ambiguous errors should be ignored,
+   *                                 true if they should be reported (used in further typechecking).
+   *  @return                        A search result
    */
   def inferImplicit(tree: Tree, pt: Type, reportAmbiguous: Boolean, isView: Boolean, context: Context, saveAmbiguousDivergent: Boolean=true): SearchResult = {
     printInference("[inferImplicit%s] pt = %s".format(
@@ -395,6 +397,14 @@ trait Implicits {
       val result = normSubType(tp, pt) || isView && {
         pt match {
           case TypeRef(_, Function1.Sym, args) =>
+            matchesPtView(tp, args.head, args.tail.head, undet)
+            /*
+            Since we return immediately in inferImplicit on error the
+            code below is no longer necessary. Note that this was necessary because
+            we were no longer throwing exceptions and still trying byname search.
+            Since we know that the latter will always be false it is safe to return immediately
+            for performance reasons.
+            
             val res = matchesPtView(tp, args.head, args.tail.head, undet)
             // to overcome bug in neg/sensitive.scala
             // TODO possibly refactor to some less critical spot?
@@ -404,7 +414,7 @@ trait Implicits {
                   matchesPtView(tp, arg1, args.tail.head, undet)
                 case _ => false
               }
-            else res
+            else res*/
 
           case _ =>
             false
@@ -630,14 +640,15 @@ trait Implicits {
             // TODO: the return tree is ignored.  This seems to make
             // no difference, but it's bad practice regardless.
             
-            // we call typedTypeApply which can return an error tree,
-            // so we cannot ignore the tree
-            // TODO check if that is enough
+
             val checked = itree2 match {
               case TypeApply(fun, args)           => typedTypeApply(itree2, EXPRmode, fun, args)
               case Apply(TypeApply(fun, args), _) => typedTypeApply(itree2, EXPRmode, fun, args) // t2421c
               case t                              => t
             }
+            // we call typedTypeApply which can update context errors,
+            // so we cannot ignore the tree
+            // TODO move to specific branches
             if (context.hasErrors)
               return SearchFailure
 
