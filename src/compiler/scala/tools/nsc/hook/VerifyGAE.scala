@@ -60,5 +60,5 @@ class VerifyGAE(override val global: Global) extends UserHook(global) {
   )
   
   def createHook(arg: String) =
-    Hook({ case ev @ CallMethod(from, to) if isJDK(to) && !isWhitelisted(to) && !isIgnore(from) => show(ev) })
+    Hook({ case ev @ CallMethod(from, to) if isJDK(to) && !isWhitelisted(to) && !isIgnore(from) => show(ev); NoResponse })
 }

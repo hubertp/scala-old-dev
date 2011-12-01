@@ -358,7 +358,7 @@ trait EventsUniverse extends AnyRef with Events {
     }
     
     abstract class HookCompanion {
-      def apply(f: Event =>? Unit): Hook 
+      def apply(f: Event =>? EventResponse): Hook 
     }
 
     // Normal way of informing about an event

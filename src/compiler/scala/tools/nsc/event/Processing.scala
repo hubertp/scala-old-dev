@@ -26,6 +26,7 @@ trait Processing {
       lazy val hook: Hook = Hook({
         case x if x matches f =>
           gatherer.set ++= x matching f
+          NoResponse
       })
 
       def contains(key: T) = set contains key

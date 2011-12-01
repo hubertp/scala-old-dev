@@ -123,15 +123,15 @@ trait EventsSymbolTable extends EventsUniverse
       def startBlock(): Unit = ()
       def endBlock(): Unit = ()
     }
-    object Hook extends HookCompanion {      
-      class SimpleHook(f: Event => Unit) extends Hook {
-        def action(ev: Event): Unit = f(ev)
+    object Hook extends HookCompanion {
+      class SimpleHook(f: Event => EventResponse) extends Hook {
+        def action(ev: Event): EventResponse = f(ev)
       }
       class LoggerHook(val fmt: String) extends Hook {
         override def show(ev: Event) = Console println (ev formattedString fmt)
-        def action(ev: Event): Unit = show(ev)
+        def action(ev: Event): EventResponse = show(ev)
       }
-      class IndentationHook(f: (Int) => (Event) => Unit) extends Hook {
+      class IndentationHook(f: (Int) => (Event) => EventResponse) extends Hook {
         private var _indent: Int = 0
         def indentSize = _indent
         override def startBlock() {
@@ -149,21 +149,21 @@ trait EventsSymbolTable extends EventsUniverse
         // Used when exception is propagated and 
         // we revert to last known place
         def resetIndentation(a: Int) = _indent = a
-        override def action(ev: Event): Unit = {
+        override def action(ev: Event): EventResponse = {
           f(_indent)(ev)
         }
       }
       
-      def indentation(pf: Int => Event =>? Unit): IndentationHook = {
+      def indentation(pf: Int => Event =>? EventResponse): IndentationHook = {
         val (filt, fn) = Filter decomposeIndent pf
         new IndentationHook(fn) filterBy filt
       }
       
-      def apply(pf: Event =>? Unit): Hook = {
+      def apply(pf: Event =>? EventResponse): Hook = {
         val (filt, fn) = Filter decompose pf
         new SimpleHook(fn) filterBy filt
       }
-      def start(pf: Event =>? Unit): Hook = apply(pf).start
+      def start(pf: Event =>? EventResponse): Hook = apply(pf).start
       def log(): Hook = log("[%ph] %ev %po")
       def log(fmt: String): Hook = new LoggerHook(fmt)
     }
@@ -247,7 +247,7 @@ trait EventsSymbolTable extends EventsUniverse
       def apply(f: Event => Boolean): Filter = apply("", f)
     }
     
-    def <<(ev: Event): Unit = {
+    def <<(ev: Event): EventResponse = {
       if (eventsOn) {
         dlog(ev.toString)
         //assert(!ev.isInstanceOf[DoneBlock])
@@ -255,7 +255,7 @@ trait EventsSymbolTable extends EventsUniverse
       }
     }
     
-    def <<<(ev: Event): Unit = {
+    def <<<(ev: Event): EventResponse = {
       if (eventsOn) {
         // start block
         ev.blockStart = true
@@ -265,7 +265,7 @@ trait EventsSymbolTable extends EventsUniverse
       }
     }
     
-    def >>>(ev: Event): Unit = {
+    def >>>(ev: Event): EventResponse = {
       if (eventsOn) {
         // end block
         dlog(ev.toString)
@@ -276,7 +276,7 @@ trait EventsSymbolTable extends EventsUniverse
       }
     }
     
-    def >>(ev: Event): Unit = {
+    def >>(ev: Event): EventResponse = {
       if (eventsOn) {
         // end block
         dlog(ev.toString)
