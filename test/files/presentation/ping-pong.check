@@ -86,7 +86,7 @@ retrieved 40 members
 askType at PingPong.scala(8,10)
 ================================================================================
 [response] askTypeAt at (8,10)
-def loop: Unit = poke()
+def loop: Unit = Ping.this.poke()
 ================================================================================
 
 askType at PingPong.scala(10,10)
