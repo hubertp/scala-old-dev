@@ -203,7 +203,7 @@ abstract class TreeGen extends reflect.internal.TreeGen {
    *  symbol to its packed type, and an function for creating Idents
    *  which refer to it.
    */
-  private def mkPackedValDef(expr: Tree, owner: Symbol, name: Name): (Tree, () => Ident) = {
+  private def mkPackedValDef(expr: Tree, owner: Symbol, name: Name): (ValDef, () => Ident) = {
     val packedType = typer.packedType(expr, owner)
     val sym = (
       owner.newValue(expr.pos.makeTransparent, name)
@@ -211,8 +211,7 @@ abstract class TreeGen extends reflect.internal.TreeGen {
       setInfo packedType
     )
 
-    val identFn = () => Ident(sym) setPos sym.pos.focus setType expr.tpe
-    (ValDef(sym, expr), identFn)
+    (ValDef(sym, expr), () => Ident(sym) setPos sym.pos.focus setType expr.tpe)
   }
 
   /** Used in situations where you need to access value of an expression several times
@@ -231,7 +230,7 @@ abstract class TreeGen extends reflect.internal.TreeGen {
   }
 
   def evalOnceAll(exprs: List[Tree], owner: Symbol, unit: CompilationUnit)(within: (List[() => Tree]) => Tree): Tree = {
-    val vdefs = new ListBuffer[Tree]
+    val vdefs = new ListBuffer[ValDef]
     val exprs1 = new ListBuffer[() => Tree]
     val used = new Array[Boolean](exprs.length)
     var i = 0

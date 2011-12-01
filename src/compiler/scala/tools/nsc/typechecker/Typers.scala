@@ -700,7 +700,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
       } catch {
         case ex: CyclicReference => throw ex
         case ex: TypeError =>
-          // TODO: when move to error trees is complete we should
+          // TODO: when move to context errors is complete we should
           // be able to just drop this case
           stopCounter(rawTypeFailed, rawTypeStart)
           stopCounter(findMemberFailed, findMemberStart)
@@ -3060,10 +3060,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           val targs = args map (_.tpe)
           checkBounds(tree, NoPrefix, NoSymbol, tparams, targs, "")
           if (fun.symbol == Predef_classOf) {
-            if (checkClassType(args.head, true, false))
-              atPos(tree.pos) { gen.mkClassOf(targs.head) }
-            else 
-              args.head
+            if (checkClassType(args.head, true, false)) atPos(tree.pos) { gen.mkClassOf(targs.head) } else args.head
           } else {
             if (!isPastTyper && fun.symbol == Any_isInstanceOf && !targs.isEmpty)
               checkCheckable(tree, targs.head, "")
@@ -3790,7 +3787,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                 try adaptToMemberWithArgs(tree, qual, name, mode, false, false)
                 catch {
                   case _: TypeError =>
-                    println("TODO: no type error expected here")
+                    // TODO: what about recoverable cyclic references? Investigate if they can occur here.
                     assert(false, "No type errors expected here")
                     qual
                 }
@@ -4014,7 +4011,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           //Console.println("Owner: " + context.enclClass.owner + " " + context.enclClass.owner.id)
           val self = refinedType(parents1 map (_.tpe), context.enclClass.owner, decls, templ.pos)
           newTyper(context.make(templ, self.typeSymbol, decls)).typedRefinement(templ.body)
-          tree.setType(self)
+          tree setType self
         }
       }
 
@@ -4445,16 +4442,10 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
         case ex: TypeError =>
           tree.tpe = null
           // At some point we might want to get rid of the code below
-          // because everything will be handled by error trees. 
-          // The only problematic case are Cyclic errors which can pop up almost anywhere
+          // because everything will be handled by context errors. 
+          // The only problematic case are (recoverable?) Cyclic ref errors which can pop up almost anywhere.
           printTyping("caught %s: while typing %s".format(ex, tree)) //DEBUG
           
-/*          ex match {
-            case _: CyclicReference =>             
-            case _: RecoverableCyclicReference =>
-            case _ if !isPastTyper =>
-              println("TODO: TypeError cannot be thrown by during typechecking")
-          }*/
           reportTypeError(tree.pos, ex)
           setError(tree)
         case ex: Exception =>

@@ -8,13 +8,6 @@ package api
 
 import scala.collection.mutable.ListBuffer
 
-object Trees {
-  private final val TreeIdMask   = 0x00FFFFFF
-  private final val Erroneous    = 1 << 31
-  private final val ErrorChecked = 1 << 30
-}
-import Trees._
-
 trait Trees /*extends reflect.generic.Trees*/ { self: Universe =>
 
   // Pretty convenient when you need it:

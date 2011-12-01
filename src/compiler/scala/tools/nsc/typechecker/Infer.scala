@@ -211,7 +211,7 @@ trait Infer {
       context.issue(err)
     }
 
-    // TODO: move to more appropriate place?
+    // TODO: move to more appropriate place (isWeaklyCompatible dependency is problematic)?
     def typeErrorMsg(found: Type, req: Type) = {
       def isPossiblyMissingArgs = (found.resultApprox ne found) && isWeaklyCompatible(found.resultApprox, req)
       def missingArgsMsg = if (isPossiblyMissingArgs) "\n possible cause: missing arguments for method or constructor" else ""
@@ -270,7 +270,7 @@ trait Infer {
           if (sym1.isTerm)
             sym1.cookJavaRawInfo() // xform java rawtypes into existentials
 
-          var owntype = {
+          val owntype = {
             try pre.memberType(sym1)
             catch {
               case ex: MalformedType =>
@@ -746,7 +746,7 @@ trait Infer {
 
     /**
      * Todo: Try to make isApplicable always safe (i.e. not cause TypeErrors).
-     * The chance of TypeErrors should be reduced through error trees
+     * The chance of TypeErrors should be reduced through context errors
      */
     private[typechecker] def isApplicableSafe(undetparams: List[Symbol], ftpe: Type,
                                               argtpes0: List[Type], pt: Type): Boolean = {
@@ -1351,8 +1351,7 @@ trait Infer {
       else intersect(pt, pattp)
     }
 
-    // with side-effects
-    def inferModulePattern(pat: Tree, pt: Type) {
+    def inferModulePattern(pat: Tree, pt: Type) =
       if (!(pat.tpe <:< pt)) {
         val ptparams = freeTypeParamsOfTerms.collect(pt)
         debuglog("free type params (2) = " + ptparams)
@@ -1363,7 +1362,6 @@ trait Infer {
         else
           PatternTypeIncompatibleWithPtError(pat, pt1, pt)
       }
-    }
 
     object toOrigin extends TypeMap {
       def apply(tp: Type): Type = tp match {
@@ -1477,7 +1475,7 @@ trait Infer {
       }
     }
     
-    // TODO: remove once error tree refactoring is done
+    // TODO: remove once context errors refactoring is done
     @inline private def wrapTypeError(expr: Typer => Boolean): Boolean =
       try {
         val silentContext = context.makeSilent(context.ambiguousErrors)
@@ -1558,8 +1556,8 @@ trait Infer {
 
           val applicable = resolveOverloadedMethod(argtpes, {
             alts filter { alt =>
-              // TODO: this will need to be re-written once we substitute throwing exceptions
-              // with generating error trees. We wrap this applicability in try/catch because of #4457.
+              // TODO: rewrite after context errors stabilise. 
+              // We wrap this applicability in try/catch because of #4457.
               wrapTypeError(typer0 => typer0.infer.isApplicable(undetparams, followApply(pre.memberType(alt)), argtpes, pt)) &&
               (!varArgsOnly || isVarArgsList(alt.tpe.params))
             }

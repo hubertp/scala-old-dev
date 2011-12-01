@@ -139,8 +139,6 @@ trait Contexts { self: Analyzer =>
       else undetparams.mkString("undetparams=", ", ", "")
     def undetparams = _undetparams
     def undetparams_=(ps: List[Symbol]) = { _undetparams = ps }
-    
-    
 
     def extractUndetparams() = {
       val tparams = undetparams
@@ -151,7 +149,8 @@ trait Contexts { self: Analyzer =>
     private var mode = 0
     // use Set since we want to avoid the duplicates
     // previously ListBuffer was used but it had to implement logic that avoids duplicates
-    // TODO check performance of both
+    // TODO for performance reasons more lightweight data structure might be more
+    // appropriate but we still need to avoid duplicates
     private[this] val buffer = LinkedHashSet[AbsTypeError]()
     
     def errBuffer = buffer
