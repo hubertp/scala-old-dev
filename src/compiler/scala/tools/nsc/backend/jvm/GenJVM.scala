@@ -1174,8 +1174,8 @@ abstract class GenJVM extends SubComponent with GenJVMUtil with GenAndroid with 
     }
 
     def genCallMethod(call: CALL_METHOD) {
-      EV << (EV.CallMethod(this.method.symbol, method) withPos call.pos)
       val CALL_METHOD(method, style) = call
+      EV << (EV.CallMethod(this.method.symbol, method) withPos call.pos)
       val siteSymbol  = clasz.symbol
       val hostSymbol  = call.hostClass
       val methodOwner = method.owner

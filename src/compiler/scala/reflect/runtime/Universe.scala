@@ -51,7 +51,10 @@ trait EventUniverseStub {
     type CompilationUnit = NoCompilationUnit.type
     type Phase = internal.Phase
     
-    def <<(ev: Event): Unit = {}
+    def <<(ev: Event): Unit =  {}
+    def >>(ev: Event): Unit =  {}
+    def >>>(ev: Event): Unit = {}
+    def <<<(ev: Event): Unit = {}
     val Filter: FilterCompanion = null
     val Hook: HookCompanion = null
     val NameManifest: scala.reflect.Manifest[outer.Name] = null
@@ -68,6 +71,7 @@ trait EventUniverseStub {
     def eventsOn: Boolean = false
     def flagsString(flags: Long): String = internal.Flags.flagsToString(flags)
     def posString(pos: outer.Position): String = ""
+    def formatTypeString(tpe: Type): String = "(not implemented)"
       
     object NoCompilationUnit {
       def source: Any = null
