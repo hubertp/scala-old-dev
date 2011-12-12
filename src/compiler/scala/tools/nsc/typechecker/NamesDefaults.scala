@@ -490,7 +490,7 @@ trait NamesDefaults { self: Analyzer =>
             // CyclicReferences.  Fix for #3685
 
             case cr @ CyclicReference(sym, info) if sym.name == param.name =>
-              Left(if (sym.isVariable || sym.isGetter && sym.accessed.isVariable) {
+              SilentTypeError(if (sym.isVariable || sym.isGetter && sym.accessed.isVariable) {
                 // named arg not allowed
                 NameClashError(sym, arg)
               }
@@ -507,14 +507,14 @@ trait NamesDefaults { self: Analyzer =>
           }
 
           val res = typedAssign match {
-            case Left(err) if (err.kind == ErrorKinds.NameClash) =>
+            case SilentTypeError(err) if (err.kind == ErrorKinds.NameClash) =>
               ErrorGeneratorUtils.issueTypeError(err)
               typer.infer.setError(arg)
-            case Left(_) =>
+            case SilentTypeError(_) =>
               applyNamedArg
-            case Right(t) if t.isErroneous => // #4041
+            case SilentResultValue(t) if t.isErroneous => // #4041
               applyNamedArg
-            case Right(_) =>
+            case SilentResultValue(_) =>
               // This throws an exception which is caught in `tryTypedApply` (as it
               // uses `silent`) - unfortunately, tryTypedApply recovers from the
               // exception if you use errorTree(arg, ...) and conforms is allowed as

@@ -6150,12 +6150,10 @@ A type's typeSymbol should never be inspected directly.
     "lub/glb of incompatible types: " + tps.mkString("", " and ", "")) with ControlThrowable
 
   /** A throwable signalling a malformed type */
+  // TODO: use something more specialized than TypeError
   class MalformedType(msg: String) extends TypeError(msg) {
     def this(pre: Type, tp: String) = this("malformed type: " + pre + "#" + tp)
   }
-
-  /** An exception signalling a variance annotation/usage conflict */
-  class VarianceError(msg: String) extends TypeError(msg)
 
   /** The current indentation string for traces */
   private var indent: String = ""

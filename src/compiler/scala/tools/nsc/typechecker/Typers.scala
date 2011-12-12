@@ -68,6 +68,11 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
     }
   }
 */
+  
+  sealed abstract class SilentResult[+T]
+  case class SilentTypeError(err: AbsTypeError) extends SilentResult[Nothing] { }
+  case class SilentResultValue[+T](value: T) extends SilentResult[T] { }
+
 
   def newTyper(context: Context): Typer = new NormalTyper(context)
   private class NormalTyper(context : Context) extends Typer(context)
@@ -666,7 +671,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
 
     def silent[T](op: Typer => T,
                   reportAmbiguousErrors: Boolean = context.ambiguousErrors,
-                  newtree: Tree = context.tree): Either[AbsTypeError, T] = {//Any /* in fact, TypeError or T */ = { 
+                  newtree: Tree = context.tree): SilentResult[T] = {//Any /* in fact, TypeError or T */ = { 
       val rawTypeStart = startCounter(rawTypeFailed)
       val findMemberStart = startCounter(findMemberFailed)
       val subtypeStart = startCounter(subtypeFailed)
@@ -685,16 +690,16 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           context.savedTypeBounds = context1.savedTypeBounds
           context.namedApplyBlockInfo = context1.namedApplyBlockInfo
           if (context1.errBuffer.isEmpty)
-            Right(result)
+            SilentResultValue(result)
           else
             // wrapper not really necessary
-            Left(context1.errBuffer.head)
+            SilentTypeError(context1.errBuffer.head)
         } else {
           assert(context.bufferErrors || isPastTyper, "in silent mode we buffer errors")
           saveAndRestoreContext(context){
             val res = op(this)
             val errorsToReport = context.flushAndReturnBuffer()
-            if (errorsToReport.isEmpty) Right(res) else Left(errorsToReport.head)
+            if (errorsToReport.isEmpty) SilentResultValue(res) else SilentTypeError(errorsToReport.head)
           }
         }
       } catch {
@@ -706,7 +711,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           stopCounter(findMemberFailed, findMemberStart)
           stopCounter(subtypeFailed, subtypeStart)
           stopTimer(failedSilentNanos, failedSilentStart)
-          Left(TypeErrorWrapper(ex))
+          SilentTypeError(TypeErrorWrapper(ex))
       }
     }
     
@@ -774,7 +779,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
         withConstrTyperIf(treeInfo.isSelfOrSuperConstrCall(tree)){ typer1 =>
           if (original != EmptyTree && pt != WildcardType)
             typer1.silent(tpr => tpr.typed(tpr.applyImplicitArgs(tree), mode, pt)) match {
-              case Right(result) =>
+              case SilentResultValue(result) =>
                 result
               case _ =>
                 debuglog("fallback on implicits: " + tree + "/" + resetAllAttrs(original))
@@ -1057,7 +1062,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
     def instantiateExpectingUnit(tree: Tree, mode: Int): Tree = {
       val savedUndetparams = context.undetparams
       silent(_.instantiate(tree, mode, UnitClass.tpe)) match {
-        case Right(t) => t
+        case SilentResultValue(t) => t
         case _ =>
           context.undetparams = savedUndetparams
           val valueDiscard = atPos(tree.pos)(Block(List(instantiate(tree, mode, WildcardType)), Literal(Constant())))
@@ -1113,7 +1118,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
         adaptToMember(qual, HasMethodMatching(name, args map (_.tpe), restpe), reportAmbiguous, saveErrors)
       if (pt != WildcardType) {
         silent(_ => doAdapt(pt)) match {
-          case Right(result) if result != qual => 
+          case SilentResultValue(result) if result != qual => 
             result
           case _ => 
             debuglog("fallback on implicits in adaptToArguments: "+qual+" . "+name)
@@ -1133,7 +1138,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
         context.tree match {
           case Apply(tree1, args) if (tree1 eq tree) && args.nonEmpty =>
             silent(_.typedArgs(args, mode)) match {
-              case Right(xs) =>
+              case SilentResultValue(xs) =>
                 val args = xs.asInstanceOf[List[Tree]]
                 if (args exists (_.isErrorTyped))
                   reportError
@@ -1148,8 +1153,8 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
       }
       try {
         silent(typer0 => typer0.adaptToMember(qual, HasMember(name), false)) match {
-          case Right(res) => res
-          case Left(err) => onError({if (reportAmbiguous) { context.issue(err) }; setError(tree)})
+          case SilentResultValue(res) => res
+          case SilentTypeError(err) => onError({if (reportAmbiguous) { context.issue(err) }; setError(tree)})
         }
       } catch {
         case ex: TypeError =>
@@ -1702,7 +1707,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           lookupVariable(name.toString.substring(1), enclClass) match {
             case Some(repl) =>
               silent(_.typedTypeConstructor(stringParser(repl).typ())) match {
-                case Right(tpt) =>
+                case SilentResultValue(tpt) =>
                   val alias = enclClass.newAliasType(useCase.pos, name.toTypeName)
                   val tparams = cloneSymbolsAtOwner(tpt.tpe.typeSymbol.typeParams, alias)
                   alias setInfo typeFun(tparams, appliedType(tpt.tpe, tparams map (_.tpe)))
@@ -2016,7 +2021,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                 fun match {
                   case etaExpansion(vparams, fn, args) if !codeExpected =>
                     silent(_.typed(fn, forFunMode(mode), pt)) match {
-                      case Right(fn1) if context.undetparams.isEmpty =>
+                      case SilentResultValue(fn1) if context.undetparams.isEmpty =>
                         // if context,undetparams is not empty, the function was polymorphic, 
                         // so we need the missing arguments to infer its type. See #871
                         //println("typing eta "+fun+":"+fn1.tpe+"/"+context.undetparams)
@@ -2379,7 +2384,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
               // the inner "doTypedApply" does "extractUndetparams" => restore when it fails
               val savedUndetparams = context.undetparams
               silent(_.doTypedApply(tree, fun, tupleArgs, mode, pt)) match {
-                case Right(t) =>
+                case SilentResultValue(t) =>
                   // Depending on user options, may warn or error here if
                   // a Unit or tuple was inserted.
                   Some(t) filter (tupledTree =>
@@ -3474,9 +3479,9 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
         }
         
         silent(_.doTypedApply(tree, fun, args, mode, pt)) match {
-          case Right(t) =>
+          case SilentResultValue(t) =>
             t
-          case Left(err) =>
+          case SilentTypeError(err) =>
             onError(err)
         }
       }
@@ -3514,7 +3519,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           silent(_.typed(fun, forFunMode(mode), funpt),
                  if ((mode & EXPRmode) != 0) false else context.ambiguousErrors,  
                  if ((mode & EXPRmode) != 0) tree else context.tree) match {
-            case Right(fun1) =>
+            case SilentResultValue(fun1) =>
               val fun2 = if (stableApplication) stabilizeFun(fun1, mode, pt) else fun1
               incCounter(typedApplyCount)
               def isImplicitMethod(tpe: Type) = tpe match {
@@ -3551,7 +3556,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                 typed1(macroExpand(res), mode, pt)
               else 
                 res
-            case Left(err) =>
+            case SilentTypeError(err) =>
               onError({issue(err); setError(tree)})
           }
         }
@@ -3752,12 +3757,12 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
             case SelectFromTypeTree(_, _) => treeCopy.SelectFromTypeTree(tree, qual, name)
           }
           val (result, accessibleError) = silent(_.makeAccessible(tree1, sym, qual.tpe, qual)) match {
-            case Left(err) =>
+            case SilentTypeError(err) =>
               if (err.kind != ErrorKinds.Access) {
                 context issue err
                 return setError(tree)
               } else (tree1, Some(err))
-            case Right(treeAndPre) =>
+            case SilentResultValue(treeAndPre) =>
               (stabilize(treeAndPre._1, treeAndPre._2, mode, pt), None)
           } 
 
@@ -4108,7 +4113,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
             val typer1 = newTyper(context.makeNewScope(tree, context.owner))
             for (useCase <- comment.useCases) {
               typer1.silent(_.typedUseCase(useCase)) match {
-                case Left(err) =>
+                case SilentTypeError(err) =>
                   unit.warning(useCase.pos, err.errMsg)
                 case _ =>
               }
@@ -4306,16 +4311,16 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           val tree1 = // temporarily use `filter` and an alternative for `withFilter`
             if (name == nme.withFilter)
               silent(_ => typedSelect(qual1, name)) match {
-                case Right(result) => 
+                case SilentResultValue(result) => 
                   result
-                case Left(ex1) =>
+                case _ =>
                   silent(_ => typed1(Select(qual1, nme.filter) setPos tree.pos, mode, pt)) match {
-                    case Right(result2) =>
+                    case SilentResultValue(result2) =>
                       unit.deprecationWarning(
                         tree.pos, "`withFilter' method does not yet exist on "+qual1.tpe.widen+
                         ", using `filter' method instead")
                       result2
-                    case Left(err) =>
+                    case SilentTypeError(err) =>
                       WithFilterError(tree, err)
                   }
               }

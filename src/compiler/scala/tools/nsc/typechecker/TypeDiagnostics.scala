@@ -93,37 +93,6 @@ trait TypeDiagnostics {
     }
   }
   
-  def notAMemberMessage(pos: Position, qual: Tree, name: Name) = {
-    val owner            = qual.tpe.typeSymbol
-    val target           = qual.tpe.widen
-    def targetKindString = if (owner.isTypeParameterOrSkolem) "type parameter " else ""
-    def nameString       = decodeWithKind(name, owner)
-    /** Illuminating some common situations and errors a bit further. */
-    def addendum         = {
-      val companion = {
-        if (name.isTermName && owner.isPackageClass) {
-          target.member(name.toTypeName) match {
-            case NoSymbol => ""
-            case sym      => "\nNote: %s exists, but it has no companion object.".format(sym)
-          }
-        }
-        else ""
-      }
-      val semicolon = (
-        if (posPrecedes(qual.pos, pos))
-          "\npossible cause: maybe a semicolon is missing before `"+nameString+"'?"
-        else
-          ""
-      )
-      companion + semicolon
-    }
-
-    withAddendum(qual.pos)(
-      if (name == nme.CONSTRUCTOR) target + " does not have a constructor"
-      else nameString + " is not a member of " + targetKindString + target + addendum
-    )
-  }
-
   /** An explanatory note to be added to error messages
    *  when there's a problem with abstract var defs */
   def abstractVarMessage(sym: Symbol): String =
